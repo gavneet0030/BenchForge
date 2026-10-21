@@ -29,7 +29,10 @@ def initialize_database(database: Path) -> None:
                 run_id TEXT NOT NULL DEFAULT 'legacy',
                 variant TEXT NOT NULL DEFAULT 'single',
                 binary TEXT,
-                config_json TEXT NOT NULL DEFAULT '{}'
+                config_json TEXT NOT NULL DEFAULT '{}',
+                pair_index INTEGER,
+                execution_order INTEGER,
+                seed INTEGER
             )
         """)
 
@@ -45,6 +48,9 @@ def initialize_database(database: Path) -> None:
             "variant": "TEXT NOT NULL DEFAULT 'single'",
             "binary": "TEXT",
             "config_json": "TEXT NOT NULL DEFAULT '{}'",
+            "pair_index": "INTEGER",
+            "execution_order": "INTEGER",
+            "seed": "INTEGER",
         }
 
         for column, declaration in migrations.items():
@@ -130,6 +136,21 @@ def save_samples(
         if isinstance(extra_work, bool) or not isinstance(extra_work, int) or extra_work < 0:
             raise ValueError("extra_work must be a non-negative integer.")
 
+        for key in ("pair_index", "execution_order"):
+            value = record.get(key)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 0
+            ):
+                raise ValueError(f"{key} must be a non-negative integer.")
+
+        seed = record.get("seed")
+        if seed is not None and (
+            isinstance(seed, bool) or not isinstance(seed, int)
+        ):
+            raise ValueError("seed must be an integer.")
+
         rows.append((
             record["timestamp_utc"],
             record["workload"],
@@ -143,6 +164,9 @@ def save_samples(
             variant,
             record.get("binary"),
             config_json,
+            record.get("pair_index"),
+            record.get("execution_order"),
+            seed,
         ))
 
     initialize_database(database)
@@ -152,8 +176,9 @@ def save_samples(
             INSERT INTO benchmark_samples (
                 timestamp_utc, workload, sample_index, elapsed_ns,
                 extra_work, os, python_version, schema_version,
-                run_id, variant, binary, config_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                run_id, variant, binary, config_json,
+                pair_index, execution_order, seed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, rows)
 
     return resolved_run_id

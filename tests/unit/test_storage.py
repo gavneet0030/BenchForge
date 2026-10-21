@@ -37,6 +37,7 @@ def test_initialize_database_creates_expected_columns(tmp_path):
     assert {
         "timestamp_utc", "elapsed_ns", "run_id",
         "variant", "binary", "config_json",
+        "pair_index", "execution_order", "seed",
     } <= columns
 
 
@@ -135,3 +136,47 @@ def test_migrates_existing_legacy_schema(tmp_path):
         """).fetchone()
 
     assert row == ("legacy", "single", 1000)
+
+
+
+def test_persists_ab_pair_metadata(tmp_path):
+    database = tmp_path / "ab-history.sqlite"
+    records = make_records(2)
+
+    for index, record in enumerate(records):
+        record["pair_index"] = index
+        record["execution_order"] = index * 2
+        record["seed"] = 2026
+
+    save_samples(
+        database,
+        records,
+        run_id="ab-run",
+        variant="baseline",
+        config={"seed": 2026},
+    )
+
+    samples = get_samples(database, run_id="ab-run", variant="baseline")
+
+    assert [row["pair_index"] for row in samples] == [0, 1]
+    assert [row["execution_order"] for row in samples] == [0, 2]
+    assert [row["seed"] for row in samples] == [2026, 2026]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("pair_index", -1),
+        ("pair_index", True),
+        ("execution_order", -1),
+        ("execution_order", 1.5),
+        ("seed", True),
+        ("seed", "2026"),
+    ],
+)
+def test_rejects_invalid_ab_metadata(tmp_path, field, value):
+    record = make_records(1)
+    record[0][field] = value
+
+    with pytest.raises(ValueError):
+        save_samples(tmp_path / "invalid-ab.sqlite", record)
