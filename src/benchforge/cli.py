@@ -1,7 +1,6 @@
 ﻿"""BenchForge command-line interface."""
 
 import platform
-import sqlite3
 import sys
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from rich import print
 
 from benchforge import __version__
 from benchforge.runner import run_benchmark
+from benchforge.storage import initialize_database, save_samples
 
 app = typer.Typer(
     name="benchforge",
@@ -46,8 +46,13 @@ def run(
     iterations: int = typer.Option(100000, min=1),
     extra_work: int = typer.Option(0, "--extra-work", min=0),
     output: Path = typer.Option(Path("data/raw/latest.jsonl")),
+    database: Path = typer.Option(
+        Path("data/benchforge.sqlite"),
+        "--database",
+        help="SQLite database for persistent benchmark history.",
+    ),
 ):
-    """Run the initial native hash-map benchmark."""
+    """Run the native hash-map benchmark and persist its measurements."""
     records = run_benchmark(
         binary=binary,
         runs=runs,
@@ -57,46 +62,52 @@ def run(
         output=output,
     )
 
-    durations = [row["elapsed_ns"] for row in records]
+    config = {
+        "binary_path": str(binary.resolve()),
+        "runs": runs,
+        "warmup": warmup,
+        "iterations": iterations,
+        "extra_work": extra_work,
+    }
+
+    run_id = save_samples(
+        database=database,
+        records=records,
+        variant="single",
+        config=config,
+    )
+
     import numpy as np
 
+    durations = [row["elapsed_ns"] for row in records]
     print(f"[green]Saved {len(records)} samples to {output}[/green]")
+    print(f"[green]Saved history to {database}[/green]")
+    print(f"Run ID: {run_id}")
     print(f"Median: {np.median(durations):,.0f} ns")
     print(f"P95: {np.percentile(durations, 95):,.0f} ns")
     print(f"Minimum: {min(durations):,} ns")
     print(f"Maximum: {max(durations):,} ns")
-    print("[yellow]These are local observations, not a validated regression conclusion.[/yellow]")
+    print(
+        "[yellow]These are local observations, not a "
+        "validated regression conclusion.[/yellow]"
+    )
 
 
 @app.command()
 def init_db(
-    database: Path = typer.Option(Path("data/benchforge.sqlite"), "--database")
+    database: Path = typer.Option(
+        Path("data/benchforge.sqlite"),
+        "--database",
+    ),
 ):
-    """Create the initial local history database."""
-    database.parent.mkdir(parents=True, exist_ok=True)
-
-    with sqlite3.connect(database) as connection:
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS benchmark_samples (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp_utc TEXT NOT NULL,
-                workload TEXT NOT NULL,
-                sample_index INTEGER NOT NULL,
-                elapsed_ns INTEGER NOT NULL,
-                extra_work INTEGER NOT NULL,
-                os TEXT,
-                python_version TEXT,
-                schema_version INTEGER NOT NULL
-            )
-        """)
-        connection.commit()
-
+    """Create or migrate the local benchmark history database."""
+    initialize_database(database)
     print(f"[green]Database initialized: {database}[/green]")
 
 
 @app.command()
 def compare():
-    """Reserved for the validated baseline/candidate comparison workflow."""
+    """Reserved for the baseline/candidate comparison workflow."""
     print(
         "[yellow]Comparison workflow is not enabled yet. "
         "It will be implemented after statistical validation tests pass.[/yellow]"
