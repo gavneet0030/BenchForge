@@ -1,0 +1,10 @@
+﻿{
+  "schema_version": 1,
+  "name": "hash_lookup",
+  "language": "cpp",
+  "iterations": 100000,
+  "warmup_runs": 3,
+  "measurement_runs": 30,
+  "extra_work": 0,
+  "description": "Initial local hash-map lookup benchmark."
+}
