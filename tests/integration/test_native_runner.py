@@ -83,3 +83,66 @@ def test_runner_rejects_missing_executable(tmp_path):
             runs=2,
             output=tmp_path / "missing.jsonl",
         )
+
+
+def test_runtime_environment_preserves_path_and_adds_configured_directory(
+    tmp_path, monkeypatch
+):
+    import os
+
+    from benchforge.runner import _native_runtime_environment
+
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    monkeypatch.setenv("PATH", "existing-path")
+    monkeypatch.setenv("BENCHFORGE_NATIVE_RUNTIME_DIR", str(runtime_dir))
+
+    environment = _native_runtime_environment(tmp_path / "benchmark.exe")
+
+    assert environment["PATH"].split(os.pathsep)[0] == str(runtime_dir.resolve())
+    assert "existing-path" in environment["PATH"]
+
+
+def test_runtime_environment_ignores_missing_configured_directory(
+    tmp_path, monkeypatch
+):
+    from benchforge.runner import _native_runtime_environment
+
+    monkeypatch.setenv("PATH", "existing-path")
+    monkeypatch.setenv(
+        "BENCHFORGE_NATIVE_RUNTIME_DIR",
+        str(tmp_path / "does-not-exist"),
+    )
+
+    environment = _native_runtime_environment(tmp_path / "benchmark.exe")
+
+    assert environment["PATH"] == "existing-path"
+
+
+def test_runtime_environment_detects_cmake_compiler_directory(
+    tmp_path, monkeypatch
+):
+    import os
+
+    from benchforge.runner import _native_runtime_environment
+
+    build_dir = tmp_path / "build"
+    build_dir.mkdir()
+    runtime_dir = tmp_path / "compiler-bin"
+    runtime_dir.mkdir()
+    binary = build_dir / "benchmark.exe"
+    binary.write_text("", encoding="utf-8")
+    (build_dir / "CMakeCache.txt").write_text(
+        "CMAKE_CXX_COMPILER:UNINITIALIZED="
+        + str(runtime_dir / "g++.exe")
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("PATH", "existing-path")
+    monkeypatch.delenv("BENCHFORGE_NATIVE_RUNTIME_DIR", raising=False)
+
+    environment = _native_runtime_environment(binary)
+
+    assert environment["PATH"].split(os.pathsep)[0] == str(runtime_dir.resolve())
+    assert "existing-path" in environment["PATH"]
