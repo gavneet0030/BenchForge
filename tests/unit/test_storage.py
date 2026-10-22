@@ -1,8 +1,14 @@
-﻿import sqlite3
+import sqlite3
+from unittest.mock import patch
 
 import pytest
 
-from benchforge.storage import get_samples, initialize_database, save_samples
+from benchforge.storage import (
+    get_samples,
+    initialize_database,
+    save_experiment_samples,
+    save_samples,
+)
 
 
 def make_records(count=3):
@@ -28,16 +34,18 @@ def test_initialize_database_creates_expected_columns(tmp_path):
     initialize_database(database)
 
     with sqlite3.connect(database) as connection:
-        columns = {
-            row[1] for row in connection.execute(
-                "PRAGMA table_info(benchmark_samples)"
-            )
-        }
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(benchmark_samples)")}
 
     assert {
-        "timestamp_utc", "elapsed_ns", "run_id",
-        "variant", "binary", "config_json",
-        "pair_index", "execution_order", "seed",
+        "timestamp_utc",
+        "elapsed_ns",
+        "run_id",
+        "variant",
+        "binary",
+        "config_json",
+        "pair_index",
+        "execution_order",
+        "seed",
     } <= columns
 
 
@@ -95,9 +103,7 @@ def test_invalid_batch_is_not_partially_inserted(tmp_path):
 
     initialize_database(database)
     with sqlite3.connect(database) as connection:
-        count = connection.execute(
-            "SELECT COUNT(*) FROM benchmark_samples"
-        ).fetchone()[0]
+        count = connection.execute("SELECT COUNT(*) FROM benchmark_samples").fetchone()[0]
 
     assert count == 0
 
@@ -136,7 +142,6 @@ def test_migrates_existing_legacy_schema(tmp_path):
         """).fetchone()
 
     assert row == ("legacy", "single", 1000)
-
 
 
 def test_persists_ab_pair_metadata(tmp_path):
@@ -180,3 +185,72 @@ def test_rejects_invalid_ab_metadata(tmp_path, field, value):
 
     with pytest.raises(ValueError):
         save_samples(tmp_path / "invalid-ab.sqlite", record)
+
+
+def test_save_experiment_samples_persists_both_variants(tmp_path):
+    database = tmp_path / "atomic.sqlite"
+
+    run_id = save_experiment_samples(
+        database,
+        run_id="atomic-run",
+        baseline=make_records(2),
+        candidate=make_records(2),
+        config={"seed": 2026},
+    )
+
+    assert run_id == "atomic-run"
+    assert len(get_samples(database, run_id=run_id, variant="baseline")) == 2
+    assert len(get_samples(database, run_id=run_id, variant="candidate")) == 2
+
+
+def test_save_experiment_samples_rolls_back_baseline_if_candidate_fails(tmp_path):
+    database = tmp_path / "atomic-rollback.sqlite"
+    initialize_database(database)
+
+    real_connect = sqlite3.connect
+
+    class FailingConnection:
+        def __init__(self, connection):
+            self.connection = connection
+            self.executemany_calls = 0
+
+        def __enter__(self):
+            self.connection.__enter__()
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return self.connection.__exit__(exc_type, exc_value, traceback)
+
+        def executemany(self, sql, rows):
+            self.executemany_calls += 1
+            if self.executemany_calls == 2:
+                raise sqlite3.IntegrityError("simulated candidate insert failure")
+            return self.connection.executemany(sql, rows)
+
+        def __getattr__(self, name):
+            return getattr(self.connection, name)
+
+    calls = 0
+
+    def connect_with_failure(*args, **kwargs):
+        nonlocal calls
+        connection = real_connect(*args, **kwargs)
+        calls += 1
+        # initialize_database connects first; inject failure into the
+        # subsequent transaction connection.
+        if calls == 2:
+            return FailingConnection(connection)
+        return connection
+
+    with (
+        patch("benchforge.storage.sqlite3.connect", side_effect=connect_with_failure),
+        pytest.raises(sqlite3.IntegrityError, match="simulated candidate"),
+    ):
+        save_experiment_samples(
+            database,
+            run_id="rollback-run",
+            baseline=make_records(2),
+            candidate=make_records(2),
+        )
+
+    assert get_samples(database, run_id="rollback-run") == []

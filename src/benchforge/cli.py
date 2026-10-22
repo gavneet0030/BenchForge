@@ -1,4 +1,4 @@
-﻿"""BenchForge command-line interface."""
+"""BenchForge command-line interface."""
 
 import json
 import platform
@@ -149,9 +149,7 @@ def compare(
     candidate_rows = get_samples(database, run_id=run_id, variant="candidate")
 
     if not baseline_rows or not candidate_rows:
-        raise typer.BadParameter(
-            "Run ID must contain both baseline and candidate samples."
-        )
+        raise typer.BadParameter("Run ID must contain both baseline and candidate samples.")
 
     def index_rows(rows, variant):
         indexed = {}
@@ -159,13 +157,9 @@ def compare(
             pair_index = row.get("pair_index")
             elapsed_ns = row.get("elapsed_ns")
             if isinstance(pair_index, bool) or not isinstance(pair_index, int):
-                raise typer.BadParameter(
-                    f"{variant} samples are missing a valid pair_index."
-                )
+                raise typer.BadParameter(f"{variant} samples are missing a valid pair_index.")
             if pair_index in indexed:
-                raise typer.BadParameter(
-                    f"Duplicate {variant} pair_index: {pair_index}"
-                )
+                raise typer.BadParameter(f"Duplicate {variant} pair_index: {pair_index}")
             indexed[pair_index] = elapsed_ns
         return indexed
 
@@ -173,9 +167,7 @@ def compare(
     candidate_by_pair = index_rows(candidate_rows, "candidate")
 
     if set(baseline_by_pair) != set(candidate_by_pair):
-        raise typer.BadParameter(
-            "Baseline and candidate pair_index sets do not match."
-        )
+        raise typer.BadParameter("Baseline and candidate pair_index sets do not match.")
 
     pair_indices = sorted(baseline_by_pair)
     baseline = [baseline_by_pair[i] for i in pair_indices]
@@ -201,10 +193,7 @@ def compare(
     print(f"Run ID: {run_id}")
     print(f"Matched pairs: {len(pair_indices)}")
     print(f"Effect: median paired candidate/baseline ratio = {ratio:.5f}")
-    print(
-        f"{confidence:.1%} paired bootstrap CI: "
-        f"[{ci_low:.5f}, {ci_high:.5f}]"
-    )
+    print(f"{confidence:.1%} paired bootstrap CI: [{ci_low:.5f}, {ci_high:.5f}]")
     print(f"Wilcoxon signed-rank p-value: {p_value:.6g}")
     print(f"Practical regression threshold: {threshold:.1%}")
     print(f"Significance level alpha: {alpha:.3f}")
@@ -296,13 +285,14 @@ def ab(
         for record in ordered_records:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
 
-    from benchforge.storage import save_samples
+    from benchforge.storage import save_experiment_samples
 
-    save_samples(
-        database, baseline, run_id=run_id, variant="baseline", config=config
-    )
-    save_samples(
-        database, candidate, run_id=run_id, variant="candidate", config=config
+    save_experiment_samples(
+        database,
+        run_id=run_id,
+        baseline=baseline,
+        candidate=candidate,
+        config=config,
     )
 
     baseline_median = statistics.median(r["elapsed_ns"] for r in baseline)
@@ -318,6 +308,7 @@ def ab(
     print(f"Raw JSONL: {output}")
     print(f"SQLite database: {database}")
     print("Descriptive result only: no statistical regression verdict has been calculated.")
+
 
 if __name__ == "__main__":
     app()
