@@ -1,4 +1,4 @@
-﻿import json
+import json
 import subprocess
 from pathlib import Path
 
@@ -30,7 +30,11 @@ def test_ab_produces_paired_records_in_execution_order(
     candidate = make_executable(tmp_path / "candidate.exe")
     calls = []
 
+    real_run = subprocess.run
+
     def fake_run(command, **kwargs):
+        if "--iterations" not in command:
+            return real_run(command, **kwargs)
         calls.append(command)
         iterations = int(command[command.index("--iterations") + 1])
         extra_work = int(command[command.index("--extra-work") + 1])
@@ -77,7 +81,11 @@ def test_seed_reproduces_variant_order(tmp_path, monkeypatch):
     baseline = make_executable(tmp_path / "base.exe")
     candidate = make_executable(tmp_path / "cand.exe")
 
+    real_run = subprocess.run
+
     def fake_run(command, **kwargs):
+        if "--iterations" not in command:
+            return real_run(command, **kwargs)
         iterations = int(command[command.index("--iterations") + 1])
         extra_work = int(command[command.index("--extra-work") + 1])
         return subprocess.CompletedProcess(

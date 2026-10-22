@@ -1,4 +1,4 @@
-﻿import json
+import json
 from pathlib import Path
 
 import pytest
@@ -123,6 +123,9 @@ def test_runtime_environment_detects_cmake_compiler_directory(
     tmp_path, monkeypatch
 ):
     import os
+
+    if os.name != "nt":
+        pytest.skip("CMake compiler runtime discovery is Windows-specific.")
 
     from benchforge.runner import _native_runtime_environment
 
