@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from .runner import _native_runtime_environment
+
 
 def _measure(
     binary: Path,
@@ -34,6 +36,7 @@ def _measure(
         capture_output=True,
         text=True,
         timeout=120,
+        env=_native_runtime_environment(binary),
     )
 
     try:

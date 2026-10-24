@@ -4,6 +4,7 @@ import json
 import platform
 import statistics
 import sys
+from datetime import UTC
 from pathlib import Path
 
 import typer
@@ -158,6 +159,15 @@ def compare(
             elapsed_ns = row.get("elapsed_ns")
             if isinstance(pair_index, bool) or not isinstance(pair_index, int):
                 raise typer.BadParameter(f"{variant} samples are missing a valid pair_index.")
+            if (
+                isinstance(elapsed_ns, bool)
+                or not isinstance(elapsed_ns, int)
+                or elapsed_ns <= 0
+            ):
+                raise typer.BadParameter(
+                    f"{variant} samples have an invalid elapsed_ns; "
+                    "expected a positive integer."
+                )
             if pair_index in indexed:
                 raise typer.BadParameter(f"Duplicate {variant} pair_index: {pair_index}")
             indexed[pair_index] = elapsed_ns
@@ -205,12 +215,168 @@ def compare(
 
 
 @app.command()
-def report():
-    """Reserved for reproducible research report generation."""
-    print(
-        "[yellow]Report generation is not enabled yet. "
-        "It will be implemented after experiment outputs are defined.[/yellow]"
+def report(
+    run_id: str = typer.Option(..., "--run-id", help="Experiment run ID to report."),
+    database: Path = typer.Option(
+        Path("data/benchforge.sqlite"), "--database", help="SQLite experiment database."
+    ),
+    output: Path = typer.Option(
+        Path("reports/generated/report.md"), "--output", help="Markdown report path."
+    ),
+    threshold: float = typer.Option(0.03, min=0.0, max=1.0),
+    confidence: float = typer.Option(0.95, min=0.5, max=0.999),
+    n_resamples: int = typer.Option(5000, min=100),
+    seed: int = typer.Option(2026),
+    alpha: float = typer.Option(0.05, min=0.001, max=0.25),
+    force: bool = typer.Option(False, "--force", help="Allow replacing an existing report."),
+):
+    """Generate a reproducible Markdown report for a stored A/B experiment."""
+    from datetime import datetime
+
+    from benchforge.storage import get_samples
+
+    if not database.is_file():
+        raise typer.BadParameter(f"Database does not exist: {database}")
+
+    if output.exists() and not force:
+        raise typer.BadParameter(
+            f"Output already exists: {output}. Use --force to replace it."
+        )
+
+    baseline_rows = get_samples(database, run_id=run_id, variant="baseline")
+    candidate_rows = get_samples(database, run_id=run_id, variant="candidate")
+
+    if not baseline_rows or not candidate_rows:
+        raise typer.BadParameter(
+            f"Run '{run_id}' must contain both baseline and candidate samples."
+        )
+
+    def validate_rows(rows, variant):
+        pairs = {}
+        durations = {}
+        for row in rows:
+            pair_index = row.get("pair_index")
+            elapsed_ns = row.get("elapsed_ns")
+            if isinstance(pair_index, bool) or not isinstance(pair_index, int):
+                raise typer.BadParameter(
+                    f"{variant} contains an invalid pair_index."
+                )
+            if isinstance(elapsed_ns, bool) or not isinstance(elapsed_ns, int) or elapsed_ns <= 0:
+                raise typer.BadParameter(
+                    f"{variant} contains an invalid elapsed_ns value."
+                )
+            if pair_index in pairs:
+                raise typer.BadParameter(
+                    f"{variant} contains duplicate pair_index {pair_index}."
+                )
+            pairs[pair_index] = elapsed_ns
+            durations[pair_index] = elapsed_ns
+        return durations
+
+    baseline_by_pair = validate_rows(baseline_rows, "baseline")
+    candidate_by_pair = validate_rows(candidate_rows, "candidate")
+
+    if set(baseline_by_pair) != set(candidate_by_pair):
+        raise typer.BadParameter(
+            "Baseline and candidate samples have mismatched pair_index values."
+        )
+
+    pair_indices = sorted(baseline_by_pair)
+    baseline = [baseline_by_pair[index] for index in pair_indices]
+    candidate = [candidate_by_pair[index] for index in pair_indices]
+
+    ratio = paired_median_ratio(baseline, candidate)
+    ci_low, ci_high = bootstrap_paired_median_ratio_ci(
+        baseline, candidate, confidence=confidence,
+        n_resamples=n_resamples, seed=seed,
     )
+    p_value = wilcoxon_paired_pvalue(baseline, candidate)
+    decision = classify_regression(
+        ci_low, ci_high, threshold=threshold, p_value=p_value, alpha=alpha
+    )
+
+    baseline_median = statistics.median(baseline)
+    candidate_median = statistics.median(candidate)
+    generated = datetime.now(UTC).isoformat()
+    config_json = baseline_rows[0].get("config_json")
+    try:
+        config = json.loads(config_json) if config_json else {}
+    except (TypeError, json.JSONDecodeError):
+        config = {"warning": "Stored configuration was not valid JSON."}
+
+    def unique_values(rows, key):
+        values = sorted({str(row.get(key)) for row in rows if row.get(key) is not None})
+        return ", ".join(values) if values else "Not recorded"
+
+    report_text = f"""# BenchForge A/B Experiment Report
+
+- Generated (UTC): {generated}
+- Run ID: `{run_id}`
+- Database: `{database}`
+- Matched pairs: {len(pair_indices)}
+- Decision: **{decision}**
+
+## Experimental configuration
+
+- Practical regression threshold: {threshold:.2%}
+- Confidence level: {confidence:.1%}
+- Bootstrap resamples: {n_resamples}
+- Random seed for bootstrap: {seed}
+- Significance level (alpha): {alpha}
+- Stored configuration:
+
+```json
+{json.dumps(config, indent=2, sort_keys=True)}
+```
+
+## Environment and provenance
+
+- Workload: {unique_values(baseline_rows + candidate_rows, "workload")}
+- Operating system: {unique_values(baseline_rows + candidate_rows, "os")}
+- Python version: {unique_values(baseline_rows + candidate_rows, "python_version")}
+- Baseline binary: {unique_values(baseline_rows, "binary")}
+- Candidate binary: {unique_values(candidate_rows, "binary")}
+- Schema version: {unique_values(baseline_rows + candidate_rows, "schema_version")}
+
+## Results
+
+| Metric | Baseline | Candidate |
+|---|---:|---:|
+| Sample count | {len(baseline)} | {len(candidate)} |
+| Median latency | {baseline_median:.0f} ns | {candidate_median:.0f} ns |
+
+- Paired median candidate/baseline ratio: **{ratio:.5f}**
+- Relative change: **{(ratio - 1) * 100:+.2f}%**
+- Paired bootstrap confidence interval ({confidence:.1%}): [{ci_low:.5f}, {ci_high:.5f}]
+- Wilcoxon signed-rank p-value: {p_value:.8g}
+- Practical regression threshold: {threshold:.2%}
+- Classification: **{decision}**
+
+## Interpretation and limitations
+
+A ratio below 1 indicates lower candidate latency; a ratio above 1 indicates higher candidate latency. The classification uses the configured practical threshold, confidence interval, p-value, and significance level.
+
+This result applies to the stored run, workload, binaries, and execution environment. It is not a guarantee of performance on other machines or workloads. Statistical tests do not eliminate measurement noise, environmental bias, or limitations in experimental design.
+
+## Reproducibility
+
+Re-run the analysis with the same stored experiment and parameters:
+
+```powershell
+benchforge report --run-id "{run_id}" --database "{database}" --output "{output}" --threshold {threshold} --confidence {confidence} --n-resamples {n_resamples} --seed {seed} --alpha {alpha}
+```
+"""
+
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(report_text, encoding="utf-8", newline="\n")
+    except OSError as exc:
+        raise typer.BadParameter(f"Could not write report: {exc}") from exc
+
+    print(f"Report written: {output}")
+    print(f"Run ID: {run_id}")
+    print(f"Matched pairs: {len(pair_indices)}")
+    print(f"Decision: {decision}")
 
 
 @app.command()

@@ -1,4 +1,4 @@
-﻿"""Execute the native workload and preserve raw measurements."""
+"""Execute the native workload and preserve raw measurements."""
 
 from __future__ import annotations
 
@@ -98,12 +98,30 @@ def run_benchmark(
             timeout=120,
             env=_native_runtime_environment(binary),
         )
-        measurement = json.loads(completed.stdout)
+        try:
+            measurement = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Native workload returned invalid JSON.") from exc
+
+        if not isinstance(measurement, dict):
+            raise TypeError("Native workload measurement must be a JSON object.")
 
         if measurement.get("schema_version") != 1:
             raise ValueError("Unsupported native measurement schema.")
-        if measurement.get("elapsed_ns", 0) <= 0:
+
+        elapsed_ns = measurement.get("elapsed_ns")
+        if (
+            isinstance(elapsed_ns, bool)
+            or not isinstance(elapsed_ns, int)
+            or elapsed_ns <= 0
+        ):
             raise ValueError("Native workload returned an invalid duration.")
+
+        if measurement.get("iterations") != iterations:
+            raise ValueError("Native workload returned unexpected iteration count.")
+
+        if measurement.get("extra_work") != extra_work:
+            raise ValueError("Native workload returned unexpected extra-work setting.")
 
         if index < warmup:
             continue

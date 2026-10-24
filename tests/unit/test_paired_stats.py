@@ -54,3 +54,46 @@ def test_bootstrap_rejects_too_few_resamples():
         bootstrap_paired_median_ratio_ci(
             [1, 2], [1, 2], n_resamples=10
         )
+
+@pytest.mark.parametrize(
+    "baseline,candidate",
+    [
+        ([1, 2], [1, float("inf")]),
+        ([1, 2], [1, 0]),
+        ([True, 2], [1, 2]),
+    ],
+)
+def test_paired_ratio_rejects_nonfinite_nonpositive_or_boolean_samples(
+    baseline, candidate
+):
+    with pytest.raises((TypeError, ValueError)):
+        paired_median_ratio(baseline, candidate)
+
+
+@pytest.mark.parametrize(
+    "kwargs,error",
+    [
+        ({"confidence": 1.0}, ValueError),
+        ({"confidence": 0.0}, ValueError),
+        ({"n_resamples": True}, TypeError),
+        ({"n_resamples": 99}, ValueError),
+        ({"seed": True}, TypeError),
+        ({"seed": 1.5}, TypeError),
+    ],
+)
+def test_paired_bootstrap_rejects_invalid_parameters(kwargs, error):
+    with pytest.raises(error):
+        bootstrap_paired_median_ratio_ci(
+            [100, 200, 300],
+            [110, 220, 330],
+            **kwargs,
+        )
+
+
+def test_paired_bootstrap_rejects_boolean_confidence():
+    with pytest.raises((TypeError, ValueError)):
+        bootstrap_paired_median_ratio_ci(
+            [100, 200, 300],
+            [110, 220, 330],
+            confidence=True,
+        )

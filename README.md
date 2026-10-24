@@ -8,7 +8,7 @@ BenchForge is an experimental systems-performance research toolkit for investiga
 
 It combines a native C++ hash-map lookup benchmark with Python orchestration, JSONL measurement output, paired A/B experiments, statistical comparisons, and SQLite-backed benchmark history.
 
-> **Project status:** Active research and development. The core benchmark, A/B execution, persistence, and statistical comparison workflow is implemented. Environmental quality gates, automated research reports, additional workloads, and broader validation remain future work.
+> **Project status:** Active research and development. The core benchmark, A/B execution, persistence, statistical comparison, and automated Markdown report workflow are implemented. Environmental quality gates, additional workloads, and broader validation remain future work.
 
 ## Table of Contents
 
@@ -65,7 +65,7 @@ flowchart TD
     E --> G[Paired Statistical Analysis]
     G --> H[Confidence Interval and Significance Test]
     H --> I[PASS / REGRESSION / INCONCLUSIVE]
-    G -. planned .-> J[Automated Research Report]
+    G --> J[Automated Research Report]
 ```
 
 ## Current Capabilities
@@ -80,7 +80,7 @@ flowchart TD
 | Statistical analysis | Calculates paired bootstrap confidence intervals and a paired significance test |
 | CLI | Provides `doctor`, `run`, `init-db`, `ab`, `compare`, and `report` commands |
 
-The `report` command is currently a placeholder for future reproducible report generation.
+The `report` command generates a Markdown report for a stored A/B run, including paired statistics, experiment configuration, environment metadata, interpretation, and a reproducibility command.
 
 ## Statistical Methodology
 
@@ -210,7 +210,7 @@ benchforge init-db --database "data\benchforge.sqlite"
 
 Benchmark commands can persist measurements to SQLite so samples can be retrieved for later comparison. Keep the database and raw JSONL outputs associated with the same experiment for traceability.
 
-The `report` command is reserved for future reproducible report generation and is not yet an implemented report workflow.
+The `report` command produces a reproducible Markdown summary of a stored A/B experiment. See `reports/generated/` for a generated example.
 
 ## Measurement Format
 
@@ -266,7 +266,7 @@ These are recorded results from a particular development state, not a guarantee 
 
 ### Priority 3 — Reproducible reporting
 
-- Implement the `report` command.
+- Extend the report with explicit measurement-quality warnings and additional provenance checks.
 - Generate a self-contained report with the experiment configuration, environment details, sample count, confidence interval, decision, and quality warnings.
 - Document a real case study using preserved benchmark history.
 
@@ -285,7 +285,7 @@ This roadmap is aspirational; listed items should not be interpreted as complete
 - Small sample sizes can produce inconclusive results even when a slowdown exists.
 - The initial native workload does not represent all application performance patterns.
 - A/A experiments and injected slowdowns are useful calibration tools but do not substitute for validating real-world regressions.
-- The automated report workflow and environmental quality gate remain future work.
+- The environmental quality gate and broader measurement-quality diagnostics remain future work.
 
 Use BenchForge as a research and engineering tool. Validate conclusions with repeated experiments and workload-specific evidence before making release decisions.
 
@@ -310,4 +310,4 @@ Native workload and build files are maintained alongside the Python implementati
 
 ## Future Work
 
-The next major milestone is to strengthen measurement-quality checks and research calibration, then implement reproducible reporting. Additional workloads and a documented real-world case study should follow once the experimental methodology is better validated.
+The next major milestone is to strengthen measurement-quality checks and research calibration. Additional workloads and a documented real-world case study should follow once the experimental methodology is better validated.
