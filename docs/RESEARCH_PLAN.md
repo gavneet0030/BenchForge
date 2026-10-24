@@ -1,4 +1,4 @@
-﻿# BenchForge Research Plan
+# BenchForge Research Plan
 
 ## Research question
 
@@ -7,9 +7,10 @@ How reliably can meaningful software performance regressions be detected on a no
 ## Primary measurements
 
 - Raw elapsed nanoseconds.
-- Baseline/candidate median ratio.
-- Bootstrap confidence interval.
-- Mann-Whitney U p-value.
+- Paired candidate/baseline median ratio.
+- Paired bootstrap confidence interval for the median ratio.
+- Wilcoxon signed-rank p-value for paired latency differences.
+- Mann-Whitney U p-value for separate method-comparison experiments.
 - False-positive rate and detection power.
 - Operating system, compiler, build flags and commit metadata.
 

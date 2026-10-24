@@ -1,567 +1,626 @@
+<div align="center">
+
 # BenchForge
-### Systems Performance & Reliability Benchmarking Toolkit
 
-**Can we reliably detect a real performance regression on a noisy machine — and how many measurements do we need?**
+### Systems Performance · Reliability · Experimental Engineering
 
-BenchForge is an experimental systems-performance research toolkit designed to investigate performance regressions through repeatable workloads, raw measurement collection, statistical analysis, and controlled experiments.
+**Measure performance. Quantify uncertainty. Make evidence-based decisions.**
 
-The project combines a native C++ benchmark workload with a Python orchestration layer. Its long-term objective is to evaluate not only whether a program became slower, but also whether the observed difference is statistically credible, reproducible, and distinguishable from normal machine noise.
+<p>
+  <a href="https://github.com/gavneet0030/BenchForge">
+    <img src="https://img.shields.io/badge/Project-BenchForge-c4b5fd?style=for-the-badge&logo=github&logoColor=171923" alt="BenchForge repository">
+  </a>
+  <img src="https://img.shields.io/badge/C%2B%2B-20-93c5fd?style=for-the-badge&logo=cplusplus&logoColor=171923" alt="C++20">
+  <img src="https://img.shields.io/badge/Python-Experiment%20Orchestration-b8c0ff?style=for-the-badge&logo=python&logoColor=171923" alt="Python">
+  <img src="https://img.shields.io/badge/Statistics-Paired%20Analysis-f9a8d4?style=for-the-badge" alt="Paired statistical analysis">
+  <img src="https://img.shields.io/badge/Status-Active%20R%26D-a7f3d0?style=for-the-badge" alt="Active research and development">
+</p>
 
-> **Project status:** Early implementation and integration testing. The native hash-lookup workload builds and executes successfully, and the Python runner has saved and validated a 10-sample measurement run. Statistical regression detection and real-world dataset validation are still under development.
+*A reproducible benchmarking toolkit for investigating performance changes, measurement noise, and statistical evidence.*
 
----
+[Overview](#-the-project) ·
+[Results](#-experimental-results) ·
+[Architecture](#-system-architecture) ·
+[Installation](#-installation) ·
+[Demo](#-demo) ·
+[Research](#-experimental-methodology)
 
-## Table of Contents
-
-- [Project Overview](#project-overview)
-- [Demo and Video Walkthroughs](#demo-and-video-walkthroughs)
-- [Why BenchForge?](#why-benchforge)
-- [Architecture](#architecture)
-- [Current Capabilities](#current-capabilities)
-- [Research Questions](#research-questions)
-- [Real-World Data and Validation Strategy](#real-world-data-and-validation-strategy)
-- [Technology Stack](#technology-stack)
-- [Getting Started](#getting-started)
-- [Running a Benchmark](#running-a-benchmark)
-- [Measurement Format](#measurement-format)
-- [Experimental Roadmap](#experimental-roadmap)
-- [Reliability and Limitations](#reliability-and-limitations)
-- [Repository Structure](#repository-structure)
-- [Testing](#testing)
-- [Future Work](#future-work)
-- [References](#references)
+</div>
 
 ---
 
-## Project Overview
+## 🔎 The project
 
-Traditional benchmarking often compares a single timing result against another. On real machines, however, timing measurements are affected by operating-system scheduling, background processes, CPU frequency changes, thermal conditions, cache state, and other sources of variability.
+### The real-world problem
 
-A small timing difference does not automatically mean that a regression occurred.
+Performance optimization is a common task in systems engineering. Developers change algorithms, remove expensive operations, improve memory access patterns, and tune native code to reduce latency.
 
-BenchForge aims to build an experimental framework for answering four questions:
+But an optimization that appears faster in one measurement may not actually be faster.
 
-1. **Detection:** Can an actual performance regression be distinguished from normal variation?
-2. **Statistical reliability:** How often does the detection method raise a false alarm when no regression exists?
-3. **Sample efficiency:** How many measurements are required to detect slowdowns of different magnitudes?
-4. **Robustness:** How does detection performance change under different levels of background noise?
+Measurements can be affected by:
 
-The current implementation begins with a native C++ hash-map lookup workload. The planned framework will extend this foundation into repeatable experiments and evidence-based performance comparisons.
+- CPU scheduling and background processes.
+- Warm-up effects and runtime state.
+- Compiler optimizations and build configuration.
+- Workload characteristics and input distribution.
+- Hardware, thermal conditions, and frequency scaling.
+- Natural variation between repeated executions.
 
-## Demo and Video Walkthroughs
+A single timing result cannot reliably distinguish a genuine improvement from measurement noise.
 
-Short demonstrations will document the complete workflow, from compiling the native workload to inspecting measurements and evaluating regression-detection results.
+**The engineering question:** How can we compare two implementations, quantify uncertainty, and make a defensible decision about the observed performance difference?
 
-**Demo 1 — Project setup and architecture**
+### The solution
 
-*Planned recording:* repository structure, Python environment, CMake configuration, and native compilation.
+BenchForge is an experimental systems-performance toolkit that combines native C++ benchmarks with Python orchestration, persistent measurement storage, paired statistical analysis, and automated reporting.
 
-**Demo 2 — Executing a benchmark**
+Instead of relying on one timing or a simple average, BenchForge supports repeated baseline-versus-candidate experiments and evaluates their results using paired measurements, bootstrap confidence intervals, and a Wilcoxon signed-rank test.
 
-*Planned recording:* running the native executable through the Python CLI, collecting repeated measurements, and inspecting the generated JSONL file.
+The outcome is a reproducible experiment record and a Markdown report that explains what was measured, what the data supports, and what limitations remain.
 
-**Demo 3 — Statistical comparison**
+### At a glance
 
-*Planned recording:* baseline-versus-candidate comparison, uncertainty intervals, and regression classification after the comparison workflow is implemented and validated.
-
-**Demo 4 — Real-world benchmark evaluation**
-
-*Planned recording:* importing a suitable public benchmark dataset, running the evaluation pipeline, and presenting reproducible results.
-
-> Replace these planned demonstrations with actual recordings as the corresponding workflows become available. Do not present a planned feature as an implemented capability.
-
-Suggested repository media layout:
-
-```text
-docs/
-└── media/
-    ├── architecture.png
-    ├── benchmark-workflow.gif
-    ├── benchmark-execution.mp4
-    └── regression-analysis.gif
-```
-
-GitHub README support for video embeds can vary by media-hosting method. A practical approach is to display a short, optimized GIF directly in the README and link to the full video hosted in the repository, a GitHub release, or another accessible video location.
-
-Example, once the GIF exists:
-
-```markdown
-![BenchForge benchmark workflow](docs/media/benchmark-workflow.gif)
-```
-
----
-
-## Why BenchForge?
-
-A useful benchmarking system should do more than produce elapsed times. It should preserve measurements, expose uncertainty, and evaluate its own error rates.
-
-BenchForge is being developed around the following principles:
-
-| Principle | Objective |
+| Dimension | Current implementation |
 |---|---|
-| Reproducibility | Preserve raw samples and execution metadata. |
-| Statistical validity | Evaluate uncertainty instead of relying on one timing result. |
-| Controlled experiments | Introduce known workload changes to measure detection behavior. |
-| Sample efficiency | Determine the measurement budget needed for reliable decisions. |
-| Transparency | Distinguish observed results from statistical conclusions. |
-| Extensibility | Add workloads, data sources, and analysis methods without redesigning the entire system. |
-
-The central research question is not simply whether a benchmark runs faster or slower. It is whether the evidence is strong enough to justify that conclusion.
+| Primary domain | Systems performance and reliability benchmarking |
+| Demonstrated workload | Native C++ hash-map lookup |
+| Optimization investigated | Lookup-key generation without modulo in the measured loop |
+| Experiment design | Repeated paired A/B measurements |
+| Native language | C++20 |
+| Orchestration and analysis | Python |
+| Persistence | SQLite |
+| Raw measurements | JSONL |
+| Statistical analysis | Paired median ratio, bootstrap CI, Wilcoxon signed-rank test |
+| Report output | Markdown |
+| Build system | CMake and Ninja |
+| Verification | pytest, Ruff, CTest |
 
 ---
 
-## Architecture
+## 🎯 Why BenchForge matters
 
-The current implementation has a native workload and a Python orchestration layer. Statistical comparison, historical storage integration, and reporting remain development goals.
+A performance benchmark should do more than print elapsed time.
+
+It should help answer five questions:
+
+1. **Correctness:** Do both implementations produce the expected result?
+2. **Measurement:** Were enough observations collected to inspect variation?
+3. **Effect size:** How much did the measured latency change?
+4. **Uncertainty:** How precise is the estimated performance difference?
+5. **Decision:** Does the evidence satisfy the configured decision criteria?
+
+BenchForge brings these concerns into one workflow.
+
+The current implementation is a focused research prototype, not a universal performance-monitoring platform. Its demonstrated results apply to the tested workload and environment.
+
+## 🧪 Experimental results
+
+### Case study: optimizing native hash-map lookup
+
+The current experiment compares a baseline C++ implementation with an optimized candidate that replaces modulo-based lookup-key progression with increment-and-wrap logic.
+
+Both implementations are checked for correctness before their timing results are compared.
+
+### Replicated results
+
+Two independent experiments were performed on the same Windows machine and workload configuration.
+
+| Metric | Experiment 1 | Experiment 2 |
+|---|---:|---:|
+| Paired observations | 30 | 30 |
+| Warm-up runs per variant | 3 | 3 |
+| Iterations per sample | 1,000,000 | 1,000,000 |
+| Baseline median | 16.8019 ms | 16.7362 ms |
+| Candidate median | 15.12095 ms | 15.0298 ms |
+| Relative median change | -10.00% | -10.15% |
+| Paired bootstrap 95% CI | [0.87662, 0.90477] | [0.89283, 0.90667] |
+| Wilcoxon p-value | 0.0001374 | 0.000001684 |
+| Configured decision | PASS | PASS |
+
+*The confidence intervals are for the paired latency ratio. A ratio below 1.0 indicates lower candidate latency.*
+
+### What did the experiment yield?
+
+**Observed outcome:** The candidate's median latency was approximately 10% lower in both experiments.
+
+The paired bootstrap confidence intervals were below 1.0, and both Wilcoxon signed-rank tests returned p-values below 0.05. Under the configured 3% regression threshold, both comparisons were classified as `PASS`.
+
+This is encouraging evidence for the specific implementation, machine, compiler configuration, and workload tested.
+
+It is not proof of a universal 10% improvement. A different processor, compiler, workload, or execution environment may produce a different result. Further validation across machines and workloads is needed before making broader claims.
+
+### Reproducibility
+
+The replication experiment used:
+
+- 30 measured observations per variant.
+- 3 warm-up runs per variant.
+- 1,000,000 iterations per measured sample.
+- Experiment seed `20261025`.
+- Bootstrap confidence level of 95%.
+- 5,000 bootstrap resamples for the generated report.
+- A configured regression threshold of 3%.
+- A significance level of 0.05.
+
+**Replication run ID**
+
+`c479d611-d75d-4c98-9a3b-713a9439bfee`
+
+The stored run can be used to regenerate the corresponding report when the experiment database is available.
+
+---
+
+## 🏗️ System architecture
+
+BenchForge separates the native benchmark from experiment control, persistence, statistical analysis, and reporting.
 
 ```mermaid
 flowchart TD
-    A[Native C++ Workload] --> B[JSON Measurement Output]
-    B --> C[Python Subprocess Runner]
-    C --> D[Validation and Metadata]
-    D --> E[Raw JSONL Measurements]
-    E -. planned .-> F[Statistical Analysis]
-    F -. planned .-> G[Baseline vs Candidate]
-    G -. planned .-> H[Regression Classification]
-    E -. planned .-> I[SQLite History]
-    F -. planned .-> J[Research Reports]
+    A["Experiment Configuration"] --> B["Python CLI and Orchestration"]
+    B --> C["Paired A/B Runner"]
+
+    C --> D["Baseline C++ Benchmark"]
+    C --> E["Optimized C++ Benchmark"]
+
+    D --> F["Measurement Validation"]
+    E --> F
+
+    F --> G["JSONL Measurement Records"]
+    F --> H["SQLite Experiment History"]
+
+    H --> I["Paired Statistical Analysis"]
+    G --> I
+
+    I --> J["Paired Latency Ratio"]
+    I --> K["Bootstrap Confidence Interval"]
+    I --> L["Wilcoxon Signed-Rank Test"]
+
+    J --> M["Decision Classification"]
+    K --> M
+    L --> M
+
+    M --> N["Automated Markdown Report"]
+
+    style A fill:#e9d5ff,stroke:#a78bfa,color:#1f1630
+    style B fill:#dbeafe,stroke:#93c5fd,color:#172554
+    style C fill:#cffafe,stroke:#67e8f9,color:#164e63
+    style D fill:#d1fae5,stroke:#6ee7b7,color:#064e3b
+    style E fill:#d1fae5,stroke:#6ee7b7,color:#064e3b
+    style I fill:#fce7f3,stroke:#f9a8d4,color:#831843
+    style M fill:#fef3c7,stroke:#fcd34d,color:#78350f
+    style N fill:#e0e7ff,stroke:#a5b4fc,color:#312e81
 ```
 
-### Component responsibilities
+### Architecture components
 
-**1. Native workload — C++20**
-
-Executes a hash-map lookup workload and measures the elapsed duration with a monotonic clock. Workload setup occurs outside the timed region.
-
-The executable emits one JSON measurement containing the workload identifier, iteration count, perturbation parameter, elapsed nanoseconds, and checksum.
-
-**2. Python orchestration — Python**
-
-Invokes the native executable through a subprocess, performs configurable warm-up executions, parses the JSON response, validates basic measurement properties, attaches environment metadata, and writes measured samples to JSONL.
-
-**3. Statistical engine — planned**
-
-Will evaluate baseline and candidate measurements using uncertainty intervals and statistical tests. The method must be calibrated and evaluated before its regression classifications can be treated as reliable.
-
-**4. Historical storage — partially scaffolded**
-
-An initial SQLite schema can be created through the CLI. Integration between the database and the benchmark execution pipeline remains future work.
-
-**5. Reporting — planned**
-
-Will turn validated measurements and experiment results into reproducible tables, visualizations, and summaries.
-
----
-
-## Current Capabilities
-
-The following reflects the project state verified during development, rather than the full planned scope.
-
-| Capability | Status |
+| Component | Responsibility |
 |---|---|
-| C++20 compiler and native CMake configuration | Verified |
-| Native hash-lookup executable | Builds and executes |
-| Versioned JSON measurement output | Verified |
-| Python subprocess-based runner | Implemented and exercised |
-| Warm-up and measured-run separation | Implemented |
-| JSONL raw measurement output | Verified |
-| Basic timing summary: median, P95, minimum, maximum | Implemented |
-| Existing Python test suite | 9 tests passing in the recorded run |
-| Ten-sample integration run | Saved and validation passed |
-| Baseline/candidate statistical comparison | Not implemented |
-| Calibrated regression decisions | Not validated |
-| SQLite history connected to benchmark runs | Pending |
-| Automated report generation | Pending |
-| Public real-world benchmark evaluation | Pending |
-
-The initial integration run used 10 measured samples, 2 warm-up executions, and 100,000 lookup iterations per measured execution.
-
-The reported median was approximately 2.18 million nanoseconds for that run. This is a local observation, not a stable performance baseline or a validated regression result. Timing will vary with the execution environment.
+| Python CLI | Exposes benchmark, comparison, reporting, and diagnostic commands |
+| A/B runner | Coordinates repeated baseline and candidate executions |
+| Native C++ executables | Execute the workload and emit benchmark measurements |
+| Runtime environment helper | Prepares the child-process environment for native execution on Windows |
+| Measurement validation | Checks benchmark output and relevant data constraints |
+| JSONL | Retains raw experiment observations |
+| SQLite | Stores benchmark history for later comparison and report generation |
+| Statistical module | Calculates ratios, confidence intervals, tests, and classifications |
+| Report generator | Produces a human-readable summary of the stored experiment |
 
 ---
 
-## Research Questions
+## 🔄 End-to-end workflow
 
-### RQ1 — False-positive calibration
+```mermaid
+flowchart LR
+    A["Configure"] --> B["Build"]
+    B --> C["Check Correctness"]
+    C --> D["Warm Up"]
+    D --> E["Measure Repeatedly"]
+    E --> F["Validate Samples"]
+    F --> G["Persist Results"]
+    G --> H["Analyze Paired Data"]
+    H --> I["Classify Evidence"]
+    I --> J["Generate Report"]
 
-When the baseline and candidate represent the same underlying performance, how frequently does the detector incorrectly report a regression?
+    style A fill:#e9d5ff,stroke:#a78bfa,color:#1f1630
+    style C fill:#d1fae5,stroke:#6ee7b7,color:#064e3b
+    style E fill:#cffafe,stroke:#67e8f9,color:#164e63
+    style H fill:#fce7f3,stroke:#f9a8d4,color:#831843
+    style J fill:#e0e7ff,stroke:#a5b4fc,color:#312e81
+```
 
-An A/A experiment will compare two equivalent configurations to estimate the false-positive rate.
-
-### RQ2 — Detection sensitivity
-
-Can the framework detect injected slowdowns of 2%, 5%, 10%, and 20%?
-
-The slowdown must be independently verified rather than inferred solely from the workload parameter.
-
-### RQ3 — Sample efficiency
-
-How does detection power change as the number of measured samples increases?
-
-The study will compare multiple sample budgets and report uncertainty around the estimated detection rate.
-
-### RQ4 — Statistical method comparison
-
-How do a simple threshold, a conventional statistical test, and the proposed decision procedure compare in false-positive rate, detection power, and sample requirements?
-
-### RQ5 — Environmental noise
-
-How does background load or other environmental variation affect the reliability of regression detection?
-
-Experiments will document the conditions under which the detector becomes inconclusive or unreliable.
+1. **Configure:** Select the workload, iteration count, repetitions, warm-ups, and experiment parameters.
+2. **Build:** Compile the native baseline and candidate implementations.
+3. **Check correctness:** Verify that both executables return valid results and matching checksums.
+4. **Warm up:** Execute the configured warm-up runs before collecting measured samples.
+5. **Measure:** Run the baseline and candidate repeatedly under the experiment configuration.
+6. **Validate:** Reject malformed or invalid measurement records according to the runner's validation rules.
+7. **Persist:** Retain raw JSONL observations and store benchmark records in SQLite.
+8. **Analyze:** Compute paired performance statistics and uncertainty estimates.
+9. **Classify:** Apply the configured decision criteria.
+10. **Report:** Generate a Markdown report with results, provenance, and limitations.
 
 ---
 
-## Real-World Data and Validation Strategy
+## 📐 Experimental methodology
 
-Controlled experiments are necessary, but they are not sufficient. A useful evaluation should also examine performance results produced by established benchmark projects.
+### 1. Paired performance comparison
 
-### Candidate public sources
+The analysis preserves the relationship between corresponding baseline and candidate observations.
 
-**1. [Airspeed Velocity (ASV)](https://github.com/airspeed-velocity/asv)**
+For a paired observation \(i\), define the latency ratio as
 
-ASV is a benchmark suite management tool designed to track performance over project revisions. Its documented results format includes benchmark results and sample-related information.
+\[
+r_i = \frac{T_{\mathrm{candidate},i}}
+           {T_{\mathrm{baseline},i}}
+\]
 
-Potential use:
-- Study historical benchmark changes across commits.
-- Identify candidate performance regressions for further investigation.
-- Evaluate how BenchForge's analysis behaves on previously recorded benchmark data.
+where \(T\) represents measured elapsed time.
 
-Important limitation: historical observations do not automatically establish that a change was a genuine regression. Hardware changes, environment differences, benchmark changes, and measurement uncertainty must be considered.
+The paired median ratio is estimated using the median of the log-transformed paired ratios:
 
-**2. [Python Performance Benchmark Suite](https://github.com/python/pyperformance)**
+\[
+R = \exp\left(\operatorname{median}
+\left(\log r_i\right)\right)
+\]
 
-`pyperformance` focuses on real-world Python performance benchmarks, including workloads involving serialization, numerical operations, and application-level behavior.
+Interpretation:
 
-Potential use:
-- Select representative workloads for a separate evaluation harness.
-- Compare implementations or revisions where measurements are compatible.
-- Investigate whether conclusions from controlled experiments generalize to more realistic workloads.
+- \(R < 1\): the candidate has lower latency.
+- \(R = 1\): the estimated paired ratio is 1.
+- \(R > 1\): the candidate has higher latency.
 
-Important limitation: BenchForge currently executes its own native C++ workload. Direct ingestion or execution of `pyperformance` and ASV results is not yet implemented.
+The relative change in latency is reported as
 
-### Proposed evaluation pipeline
+\[
+100(R-1)\%
+\]
 
-```text
-Public benchmark source
-        |
-        v
-Dataset inspection and license review
-        |
-        v
-Select comparable benchmark observations
-        |
-        v
-Normalize metadata and measurement units
-        |
-        v
-Identify valid baseline/candidate pairs
-        |
-        v
-Run the evaluation and analysis pipeline
-        |
-        v
-Report limitations, uncertainty, and results
-```
+Negative values indicate lower candidate latency.
 
-The evaluation should preserve source provenance, project revision, machine and environment metadata where available, measurement units, and any filtering decisions.
+### 2. Bootstrap confidence interval
 
-**A key distinction:** evaluating historical timing data tests analytical behavior; rerunning the benchmark tests execution and measurement behavior. Both are useful, but they answer different questions.
+BenchForge uses paired bootstrap resampling to estimate a confidence interval for the latency ratio.
 
----
+The analysis resamples paired observations together, preserving each baseline/candidate relationship. The resulting interval communicates uncertainty in the estimated ratio under the resampling procedure.
 
-## Technology Stack
+### 3. Wilcoxon signed-rank test
 
-| Layer | Technology | Purpose |
-|---|---|---|
-| Native benchmark | C++20 | Execute the timed workload |
-| Build system | CMake | Configure the native project |
-| Build backend | Ninja | Build native targets |
-| Orchestration | Python | Control benchmark execution |
-| Process interface | Python `subprocess` | Invoke the native executable |
-| Measurement interchange | JSON / JSONL | Preserve structured measurements |
-| Numerical analysis | NumPy, SciPy | Planned statistical calculations |
-| Visualization | Matplotlib | Planned research plots |
-| CLI | Typer, Rich | Command-line interface and summaries |
-| Historical storage | SQLite | Initial local-history schema |
-| Testing | pytest | Automated verification |
-| Quality tooling | Ruff | Python linting and code-quality checks |
-| Change-point analysis | ruptures | Candidate tool for later experiments |
+The paired Wilcoxon signed-rank test evaluates evidence of a systematic difference between paired measurements.
 
-The presence of a dependency does not imply that every planned feature using it is implemented.
+Its p-value is interpreted alongside the estimated effect size, confidence interval, sample count, and experimental design. A small p-value alone does not establish that an improvement is practically important.
+
+### 4. Decision classification
+
+The report generator supports three classifications:
+
+| Decision | Meaning |
+|---|---|
+| `PASS` | The confidence interval satisfies the configured non-regression criterion |
+| `REGRESSION` | The estimated interval exceeds the configured regression threshold and the statistical test satisfies the configured significance criterion |
+| `INCONCLUSIVE` | The evidence does not satisfy either decision rule |
+
+The threshold and significance level are configurable. `PASS` does not prove equivalence, and `INCONCLUSIVE` does not prove that the implementations are equal.
 
 ---
 
-## Getting Started
+## 🗃️ Data and provenance
 
-### Prerequisites
+### What data does BenchForge use?
 
-The current development environment uses Windows PowerShell, Python, CMake, Ninja, and an available C++20-capable compiler.
+The demonstrated benchmark uses a controlled native hash-map lookup workload with generated lookup inputs and a deterministic checksum check.
 
-You will need:
+**This project does not currently depend on an external business dataset or a Kaggle dataset for its demonstrated performance experiment.** The primary data consists of benchmark measurements produced by running the baseline and candidate executables.
 
-- Python with a supported version for the project configuration.
-- A C++20-capable compiler.
-- CMake 3.20 or newer.
-- Ninja, if using the Ninja build generator.
-- Git.
+### Data flow
 
-### 1. Clone the repository
+| Data artifact | Purpose |
+|---|---|
+| Generated lookup inputs | Drive the controlled benchmark workload |
+| Native JSON output | Carries measurement results and checksum information |
+| JSONL experiment records | Preserve raw observations for inspection |
+| SQLite database | Stores benchmark samples and experiment history |
+| Run configuration | Captures relevant workload and experiment parameters |
+| Markdown report | Summarizes results, uncertainty, statistical tests, and limitations |
 
-```powershell
-git clone https://github.com/gavneet0030/BenchForge.git
-Set-Location .\BenchForge
-```
+### Why retain raw measurements?
 
-### 2. Create and activate a virtual environment
+Raw measurements make it possible to investigate variability, inspect individual observations, reproduce statistical analysis, and distinguish experimental data from conclusions derived from it.
 
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
+A summary statistic without its underlying observations and configuration is less useful for independent review.
 
-If PowerShell blocks activation, use an approved local execution-policy approach or invoke the environment's Python executable directly.
+### Example experiment record
 
-### 3. Install the project
-
-```powershell
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
-```
-
-The exact optional dependency group must match the repository's `pyproject.toml`.
-
-### 4. Configure the native workload
-
-For a Windows environment with the MSYS2 UCRT64 compiler and Ninja installed:
-
-```powershell
-$env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
-
-cmake -S .\native -B .\build\native-ucrt64 -G Ninja `
-    -DCMAKE_BUILD_TYPE=Release `
-    -DCMAKE_CXX_COMPILER="C:/msys64/ucrt64/bin/g++.exe"
-```
-
-### 5. Build the executable
-
-```powershell
-cmake --build .\build\native-ucrt64 --verbose
-```
-
-The executable is expected at:
-
-```text
-build/native-ucrt64/benchforge_lookup.exe
-```
-
-Compiler paths are machine-specific. Update the configuration for your own environment rather than assuming that the example path exists on every system.
-
----
-
-## Running a Benchmark
-
-Run the native executable directly:
-
-```powershell
-.\build\native-ucrt64\benchforge_lookup.exe `
-    --iterations 100000 `
-    --extra-work 0
-```
-
-The current executable emits a single JSON object containing a measurement.
-
-To collect repeated samples through the Python runner:
-
-```powershell
-benchforge run `
-    --binary ".\build\native-ucrt64\benchforge_lookup.exe" `
-    --runs 30 `
-    --warmup 3 `
-    --iterations 100000 `
-    --extra-work 0 `
-    --output ".\data\raw\latest.jsonl"
-```
-
-The command runs warm-up executions, retains the measured samples, prints a basic timing summary, and writes the raw measurements to the requested JSONL file.
-
-The output path can be changed to preserve separate experiment runs.
-
-### Interpreting the output
-
-- **Median:** the middle observed timing and a useful summary for skewed measurements.
-- **P95:** the 95th percentile of the observed durations, which can reflect the slower tail of the sample distribution.
-- **Minimum and maximum:** the observed extremes, not guaranteed bounds on future performance.
-
-These descriptive statistics do not, by themselves, establish that a candidate is faster or slower than a baseline.
-
----
-
-## Measurement Format
-
-The native executable currently emits a versioned measurement similar to:
+A simplified conceptual measurement record might contain:
 
 ```json
 {
-  "schema_version": 1,
+  "variant": "baseline",
   "workload": "hash_lookup",
-  "iterations": 100000,
-  "extra_work": 0,
-  "elapsed_ns": 2800900,
-  "checksum": 8499450000
+  "iterations": 1000000,
+  "elapsed_ns": 16800000,
+  "checksum": 8494500
 }
 ```
 
-The Python runner adds metadata to measured records, including:
-
-- UTC timestamp
-- Sample index
-- Number of warm-up runs
-- Operating-system/platform description
-- Python version
-- Executable name
-
-Records are serialized as newline-delimited JSON. Each line represents one measured run.
-
-The example timing is illustrative of an observed local run, not a performance guarantee.
+This is an illustrative example of the measurement fields, not a claim that it is an exact stored JSONL row. The actual record schema and required fields are defined by the implementation.
 
 ---
 
-## Experimental Roadmap
+## 🧰 Technology stack and why each tool is used
 
-| Experiment | Purpose | Status |
+| Technology | Role in BenchForge | Why it is used |
 |---|---|---|
-| E1 — A/A calibration | Estimate false-positive rate | Planned |
-| E2 — Controlled slowdowns | Measure sensitivity to known changes | Planned |
-| E3 — Sample-size study | Estimate detection power at different budgets | Planned |
-| E4 — Method comparison | Compare candidate statistical procedures | Planned |
-| E5 — Background noise | Evaluate environmental robustness | Planned |
-| E6 — Historical benchmark case study | Evaluate selected public benchmark results | Planned |
-
-The experimental results should report sample counts, decision criteria, uncertainty, and failure cases. A successful demonstration on a small number of runs should not be treated as sufficient evidence of statistical reliability.
+| **C++20** | Native benchmark implementation | Executes low-level workloads with direct control over the code being measured |
+| **Python** | Experiment orchestration | Coordinates runs, validation, analysis, and report generation |
+| **CMake** | Native build configuration | Defines targets and integrates native tests |
+| **Ninja** | Build execution | Provides an efficient incremental native build workflow |
+| **NumPy** | Numerical computation | Supports array and numerical operations used in analysis |
+| **SciPy** | Statistical testing | Provides the paired Wilcoxon signed-rank test |
+| **SQLite** | Experiment persistence | Stores measurements for later comparisons and reports |
+| **JSONL** | Raw data storage | Keeps observations in a portable line-oriented format |
+| **pytest** | Python verification | Tests CLI behavior, validation, statistics, and runner functionality |
+| **Ruff** | Python linting | Checks code quality and common Python issues |
+| **CTest** | Native verification | Runs automated baseline and optimized executable correctness tests |
+| **Git and GitHub** | Version control | Track changes and publish the research implementation |
 
 ---
 
-## Reliability and Limitations
+## Demo
+**Demo video:** A recorded demonstration link has not yet been added.
 
-BenchForge is a research project under active development. The current version is not a production regression-monitoring system.
+The intended demo should show the following workflow:
 
-Known limitations include:
+1. Build the baseline and optimized native executables.
+2. Run a paired A/B benchmark.
+3. Inspect the generated measurement records.
+4. Run statistical comparison and inspect the decision.
+5. Generate and open the Markdown experiment report.
+6. Re-run the report from a stored experiment ID.
 
-- Only the native hash-map lookup workload is currently established.
-- The `extra_work` parameter is a workload perturbation control, not a calibrated percentage slowdown.
-- The runner validates basic output properties, but its test suite needs stronger end-to-end and failure-path coverage.
-- Baseline/candidate comparison and calibrated regression classification are not yet implemented.
-- Historical database persistence is not yet connected to the full run workflow.
-- Public benchmark datasets have not yet been integrated into the project.
-- Results collected on one machine may not generalize to other machines or environments.
+To add your recording, replace the placeholder below with a public video URL.
 
-A mature version should include repeated trials, environment metadata, workload validation, controlled experiments, automated statistical tests, and documented limitations.
+**Recording status:** An end-to-end demo video has not been published yet.
+
+The planned walkthrough will demonstrate native builds, paired A/B execution, statistical comparison, and automated report generation.
+
+> A public demo link will be added here when the recording is available.
+
+Recommended recording: a short terminal walkthrough followed by the generated report. Show the commands, the final decision, the confidence interval, and the limitations section rather than only displaying a performance percentage.
+
+---
+
+## Installation
+### Prerequisites
+
+The verified development environment uses:
+
+- Windows
+- Python 3.14
+- A C++20-capable compiler
+- CMake
+- Ninja
+- Git
+
+The current native build was verified using the MSYS2 UCRT64 toolchain. Other operating systems and compilers require separate validation.
+
+### Step 1
+
+```powershell
+git clone https://github.com/gavneet0030/BenchForge.git
+cd BenchForge
+```
+
+### Step 2
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+```
+
+### Step 3
+
+Install the project and development dependencies:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+For a runtime-only installation without development dependencies:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e .
+```
+
+### Step 4
+
+Configure the native C++20 targets with CMake and Ninja:
+
+```powershell
+cmake -S native -B build/native-ucrt64 -G Ninja -DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/g++.exe -DCMAKE_BUILD_TYPE=Release
+```
+
+Build both baseline and optimized executables:
+
+```powershell
+cmake --build build/native-ucrt64 --config Release
+```
+
+Run native correctness tests:
+
+```powershell
+ctest --test-dir build/native-ucrt64 -C Release --output-on-failure
+```
+
+Prerequisites: CMake, Ninja, and a working C++20 compiler. The compiler path above matches the verified MSYS2 UCRT64 environment; adjust it if your installation differs.
+
+### Step 5
+
+```powershell
+.\.venv\Scripts\python.exe -m benchforge.cli --help
+```
+
+Inspect available command options:
+
+```powershell
+.\.venv\Scripts\python.exe -m benchforge.cli doctor --help
+.\.venv\Scripts\python.exe -m benchforge.cli run --help
+.\.venv\Scripts\python.exe -m benchforge.cli ab --help
+.\.venv\Scripts\python.exe -m benchforge.cli compare --help
+.\.venv\Scripts\python.exe -m benchforge.cli report --help
+```
+
+Use the help output from your checkout as the source of truth for supported arguments.
+
+---
+
+## 📊 Reproducing the stored replication report
+
+The following command regenerates the report for the verified replication run, assuming its SQLite database is available locally.
+
+```powershell
+.\.venv\Scripts\python.exe -m benchforge.cli report `
+  --run-id "c479d611-d75d-4c98-9a3b-713a9439bfee" `
+  --database "data/benchforge.sqlite" `
+  --output "reports/generated/lookup-optimization-replication.md" `
+  --threshold 0.03 `
+  --confidence 0.95 `
+  --n-resamples 5000 `
+  --seed 2026 `
+  --alpha 0.05 `
+  --force
+```
+
+**Important:** The command reproduces the report from stored measurements; it does not rerun the original benchmark. The database and associated experiment records must be available.
+
+The `--force` option permits overwriting the output report. Use it only when you intend to replace the existing file.
+
+---
+
+## ✅ Testing and quality gates
+
+The verified development revision passed these checks:
+
+| Check | Verified outcome |
+|---|---|
+| Python test suite | 90 passed |
+| Ruff | All checks passed |
+| Native C++ build | Passed; build was up to date |
+| Native CTest | 2 of 2 passed |
+| Git staged-patch check | Passed |
+
+These are results from the verified development revision, not a guarantee that every future checkout or toolchain will produce identical results.
+
+Run the Python test suite:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Run lint:
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check src tests
+```
+
+Run native tests:
+
+```powershell
+ctest --test-dir build/native-ucrt64 -C Release --output-on-failure
+```
 
 ---
 
 ## Repository Structure
-
 ```text
 BenchForge/
-├── .github/
-│   └── workflows/
-├── data/
-│   ├── raw/
-│   └── processed/
-├── docs/
-│   └── media/
-├── experiments/
-│   ├── simulation/
-│   ├── hardware/
-│   └── README.md
-├── native/
-│   ├── CMakeLists.txt
-│   ├── include/
-│   ├── src/
-│   │   └── lookup.cpp
-│   └── tests/
-├── reports/
-│   └── generated/
-├── scripts/
-├── src/
-│   └── benchforge/
-│       ├── __init__.py
-│       ├── cli.py
-│       ├── runner.py
-│       └── stats.py
-├── tests/
-│   ├── fixtures/
-│   ├── integration/
-│   └── unit/
-├── workloads/
-│   └── hash_lookup.json
-├── .gitignore
-├── pyproject.toml
-└── README.md
+|-- .github/
+|   `-- workflows/
+|-- docs/
+|   `-- RESEARCH_PLAN.md
+|-- native/
+|   |-- src/
+|   |   |-- lookup.cpp
+|   |   `-- lookup_optimized.cpp
+|   |-- tests/
+|   |   `-- test_lookup.cmake
+|   `-- CMakeLists.txt
+|-- src/
+|   `-- benchforge/
+|       |-- ab.py
+|       |-- cli.py
+|       |-- runner.py
+|       `-- stats.py
+|-- tests/
+|   `-- unit/
+|-- data/
+|-- experiments/
+|-- reports/
+|   `-- generated/
+|-- README.md
+`-- pyproject.toml
 ```
 
-Some directories are placeholders for future work; the tree describes the intended project organization rather than claiming that every component is complete.
+Directory contents can vary between local and fresh repository checkouts; generated data and build artifacts may be excluded from version control.
 
 ---
 
-## Testing
+## Limitations and Research Integrity
+BenchForge is an active research and development project. Its current evidence has specific boundaries:
 
-Run the current test suite:
+- The demonstrated benchmark is a hash-map lookup microbenchmark, not a representative suite of all systems workloads.
+- The reported experiments were run on one machine.
+- Statistical tests do not remove systematic measurement bias or guarantee sound experimental design.
+- CPU state, compiler configuration, workload selection, and background processes can influence results.
+- The configured decision threshold is an engineering policy, not a universal definition of a regression.
+- The current results do not establish cross-platform performance.
+- Broader workload coverage, environmental quality gates, and validation across multiple machines remain future work.
 
-```powershell
-pytest tests -q
-```
-
-The recorded development run completed with:
-
-```text
-9 passed
-```
-
-A separate native/Python integration run successfully collected and validated 10 measured samples, each using 100,000 iterations. These are development verification results, not a claim that all future configurations or environments are tested.
-
-Future tests should cover:
-
-- Invalid native arguments and non-zero exit codes.
-- Malformed or unsupported measurement schemas.
-- Missing executables and subprocess timeouts.
-- JSONL persistence and record consistency.
-- Statistical calibration under A/A experiments.
-- Detection power under controlled slowdowns.
-- Reproducibility across repeated experiments.
+The objective is not to make every benchmark result look positive. It is to make the evidence, assumptions, uncertainty, and limitations explicit.
 
 ---
 
-## Future Work
-
-The planned development sequence is:
-
-1. Strengthen native/Python integration tests.
-2. Define and validate a stable measurement contract.
-3. Implement baseline/candidate comparison and statistical decision logic.
-4. Add controlled slowdown experiments and A/A calibration.
-5. Integrate benchmark history with SQLite.
-6. Add reproducible reports and research visualizations.
-7. Evaluate selected public benchmark data.
-8. Document end-to-end demonstrations and reproducible results.
-9. Improve CI coverage, packaging, error handling, and release readiness.
-
-The priority is to validate the measurement and statistical methodology before presenting BenchForge as a reliable regression detector.
-
----
-
-## References
-
-- [BenchForge repository](https://github.com/gavneet0030/BenchForge)
-- [Airspeed Velocity — benchmark suite management](https://github.com/airspeed-velocity/asv)
-- [Python Performance Benchmark Suite](https://github.com/python/pyperformance)
-- [pyperf — Python benchmarking toolkit](https://github.com/psf/pyperf)
+## Roadmap
+- [x] Native baseline hash-map lookup benchmark
+- [x] Optimized candidate implementation
+- [x] Baseline and candidate correctness checks
+- [x] Python benchmark orchestration
+- [x] SQLite-backed benchmark history
+- [x] Paired statistical comparison
+- [x] Bootstrap confidence intervals
+- [x] Wilcoxon signed-rank test
+- [x] Configurable decision classification
+- [x] Automated Markdown report generation
+- [ ] Additional representative workload families
+- [ ] Broader compiler and machine validation
+- [ ] Stronger environmental noise diagnostics
+- [ ] Sample-size sensitivity studies
+- [ ] Expanded continuous-integration coverage
+- [ ] Recorded end-to-end demo
+- [ ] Additional report visualizations
 
 ---
 
-## Project Philosophy
+## 🤝 Engineering principles
 
-**Measure first. Quantify uncertainty. Validate the detector. Then trust the conclusion.**
+BenchForge is guided by a few principles:
 
-BenchForge is being built to make performance-regression analysis more reproducible, statistically defensible, and transparent about what the evidence does — and does not — establish.
+- **Reproducibility:** Retain configuration and raw observations.
+- **Correctness first:** Validate results before interpreting timings.
+- **Statistical transparency:** Report effect sizes, uncertainty, and test outcomes.
+- **Honest conclusions:** Separate measured outcomes from general claims.
+- **Explicit limitations:** Document where evidence does and does not apply.
+- **Maintainability:** Keep the native workload, orchestration, statistics, and reporting responsibilities distinct.
+
+## 📄 License
+
+See the repository's `LICENSE` file for the applicable license terms.
+
+---
+
+<div align="center">
+
+### Measure carefully. Quantify uncertainty. Engineer with evidence.
+
+**BenchForge — Experimental performance engineering, made reproducible.**
+
+</div>

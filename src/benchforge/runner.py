@@ -1,4 +1,4 @@
-﻿"""Execute the native workload and preserve raw measurements."""
+"""Execute the native workload and preserve raw measurements."""
 
 from __future__ import annotations
 
@@ -9,6 +9,59 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+
+def _native_runtime_environment(binary: Path) -> dict[str, str]:
+    """Prepare the child environment for native runtime DLL resolution."""
+    import os
+
+    environment = os.environ.copy()
+    runtime_dirs: list[Path] = []
+
+    configured_dir = environment.get("BENCHFORGE_NATIVE_RUNTIME_DIR", "").strip()
+    if configured_dir:
+        runtime_dirs.append(Path(configured_dir).expanduser())
+
+    if os.name == "nt":
+        for parent in binary.parents:
+            cache = parent / "CMakeCache.txt"
+            if not cache.is_file():
+                continue
+
+            try:
+                lines = cache.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines()
+            except OSError:
+                break
+
+            for line in lines:
+                if line.startswith("CMAKE_CXX_COMPILER:") and "=" in line:
+                    compiler_text = line.split("=", 1)[1].strip()
+                    compiler = Path(compiler_text)
+                    if compiler.is_absolute():
+                        runtime_dirs.append(compiler.parent)
+                    break
+            break
+
+    existing_path = environment.get("PATH", "")
+    prefixes: list[str] = []
+    seen: set[str] = set()
+
+    for directory in runtime_dirs:
+        if not directory.is_dir():
+            continue
+        normalized = str(directory.resolve())
+        key = os.path.normcase(normalized)
+        if key not in seen:
+            prefixes.append(normalized)
+            seen.add(key)
+
+    if prefixes:
+        environment["PATH"] = os.pathsep.join(
+            prefixes + ([existing_path] if existing_path else [])
+        )
+
+    return environment
 
 def run_benchmark(
     binary: Path,
@@ -43,13 +96,32 @@ def run_benchmark(
             capture_output=True,
             text=True,
             timeout=120,
+            env=_native_runtime_environment(binary),
         )
-        measurement = json.loads(completed.stdout)
+        try:
+            measurement = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Native workload returned invalid JSON.") from exc
+
+        if not isinstance(measurement, dict):
+            raise TypeError("Native workload measurement must be a JSON object.")
 
         if measurement.get("schema_version") != 1:
             raise ValueError("Unsupported native measurement schema.")
-        if measurement.get("elapsed_ns", 0) <= 0:
+
+        elapsed_ns = measurement.get("elapsed_ns")
+        if (
+            isinstance(elapsed_ns, bool)
+            or not isinstance(elapsed_ns, int)
+            or elapsed_ns <= 0
+        ):
             raise ValueError("Native workload returned an invalid duration.")
+
+        if measurement.get("iterations") != iterations:
+            raise ValueError("Native workload returned unexpected iteration count.")
+
+        if measurement.get("extra_work") != extra_work:
+            raise ValueError("Native workload returned unexpected extra-work setting.")
 
         if index < warmup:
             continue
