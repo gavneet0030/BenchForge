@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from pathlib import Path
 
@@ -584,8 +585,9 @@ def test_ab_cli_defaults_to_optimized_candidate(tmp_path, monkeypatch):
     )
 
     assert result.exit_code == 0, result.output
-    assert observed["baseline_binary"].name == "benchforge_lookup.exe"
-    assert observed["candidate_binary"].name == "benchforge_lookup_optimized.exe"
+    suffix = ".exe" if os.name == "nt" else ""
+    assert observed["baseline_binary"].name == f"benchforge_lookup{suffix}"
+    assert observed["candidate_binary"].name == f"benchforge_lookup_optimized{suffix}"
 
 
 def test_workload_cli_persists_bounded_native_samples(tmp_path, monkeypatch):

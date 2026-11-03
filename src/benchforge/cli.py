@@ -1121,6 +1121,7 @@ def web(
         raise typer.BadParameter("The web application may only bind to a loopback host.")
     try:
         from uvicorn import run as run_uvicorn
+
         from benchforge.webapp import create_app
     except ModuleNotFoundError as exc:
         if exc.name in {"fastapi", "uvicorn"}:
