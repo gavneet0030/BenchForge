@@ -1,3 +1,8 @@
-﻿"""BenchForge performance regression research platform."""
+"""BenchForge performance benchmarking and regression analysis toolkit."""
 
-__version__ = "0.1.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("benchforge")
+except PackageNotFoundError:
+    __version__ = "0+unknown"

@@ -46,6 +46,19 @@ def test_initialize_database_creates_expected_columns(tmp_path):
         "pair_index",
         "execution_order",
         "seed",
+        "bytes_processed",
+        "peak_process_memory_bytes",
+        "peak_process_memory_source",
+        "current_working_set_bytes",
+        "private_process_bytes",
+        "thread_count",
+        "process_cpu_time_ns",
+        "cpu_utilization_percent",
+        "compiler",
+        "compiler_version",
+        "build_type",
+        "build_generator",
+        "build_toolset",
     } <= columns
 
 
@@ -66,6 +79,71 @@ def test_save_and_retrieve_samples(tmp_path):
     assert [row["sample_index"] for row in samples] == [0, 1, 2]
     assert all(row["variant"] == "baseline" for row in samples)
     assert all(row["config_json"] == '{"iterations": 100000}' for row in samples)
+
+
+def test_persists_process_memory_and_build_metadata(tmp_path):
+    database = tmp_path / "history.sqlite"
+    sample = make_records(1)
+    sample[0].update(
+        {
+            "bytes_processed": 8192,
+            "peak_process_memory_bytes": 4_194_304,
+            "peak_process_memory_source": "windows_peak_working_set",
+            "current_working_set_bytes": 3_145_728,
+            "private_process_bytes": 4_194_304,
+            "thread_count": 2,
+            "process_cpu_time_ns": 20_000,
+            "cpu_utilization_percent": 85.5,
+            "compiler": "MSVC",
+            "compiler_version": "19.44",
+            "build_type": "Release",
+            "build_generator": "Visual Studio 17 2022",
+            "build_toolset": "v143",
+        }
+    )
+
+    save_samples(database, sample, run_id="metadata-run")
+
+    stored = get_samples(database, run_id="metadata-run")[0]
+    assert stored["bytes_processed"] == 8192
+    assert stored["peak_process_memory_bytes"] == 4_194_304
+    assert stored["peak_process_memory_source"] == "windows_peak_working_set"
+    assert stored["current_working_set_bytes"] == 3_145_728
+    assert stored["private_process_bytes"] == 4_194_304
+    assert stored["thread_count"] == 2
+    assert stored["process_cpu_time_ns"] == 20_000
+    assert stored["cpu_utilization_percent"] == 85.5
+    assert stored["compiler"] == "MSVC"
+    assert stored["compiler_version"] == "19.44"
+    assert stored["build_type"] == "Release"
+    assert stored["build_generator"] == "Visual Studio 17 2022"
+    assert stored["build_toolset"] == "v143"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("bytes_processed", -1),
+        ("bytes_processed", True),
+        ("peak_process_memory_bytes", 0),
+        ("peak_process_memory_bytes", True),
+        ("compiler", ""),
+        ("peak_process_memory_source", 7),
+        ("current_working_set_bytes", 0),
+        ("private_process_bytes", True),
+        ("thread_count", 0),
+        ("process_cpu_time_ns", -1),
+        ("process_cpu_time_ns", True),
+        ("cpu_utilization_percent", float("nan")),
+        ("cpu_utilization_percent", -1),
+        ("cpu_utilization_percent", True),
+    ],
+)
+def test_rejects_invalid_optional_measurement_metadata(tmp_path, field, value):
+    sample = make_records(1)
+    sample[0][field] = value
+    with pytest.raises(ValueError, match=field):
+        save_samples(tmp_path / "invalid-metadata.sqlite", sample)
 
 
 def test_variants_are_isolated_by_query(tmp_path):

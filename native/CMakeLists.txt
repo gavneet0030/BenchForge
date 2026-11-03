@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.20)
 project(BenchForgeNative LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -21,6 +21,11 @@ add_benchforge_lookup_target(benchforge_lookup src/lookup.cpp)
 add_benchforge_lookup_target(
     benchforge_lookup_optimized src/lookup_optimized.cpp
 )
+add_benchforge_lookup_target(benchforge_workloads src/workloads.cpp)
+add_benchforge_lookup_target(benchforge_comparisons src/comparisons.cpp)
+if(WIN32)
+    target_link_libraries(benchforge_workloads PRIVATE ws2_32 Psapi)
+endif()
 
 include(CTest)
 
@@ -43,5 +48,21 @@ if(BUILD_TESTING)
             -DLOOKUP_EXE=$<TARGET_FILE:benchforge_lookup_optimized>
             -DRUNTIME_DIR=${BENCHFORGE_COMPILER_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_lookup.cmake
+    )
+
+    add_test(
+        NAME BenchForgeBoundedWorkloads
+        COMMAND ${CMAKE_COMMAND}
+            -DWORKLOADS_EXE=$<TARGET_FILE:benchforge_workloads>
+            -DRUNTIME_DIR=${BENCHFORGE_COMPILER_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_workloads.cmake
+    )
+
+    add_test(
+        NAME BenchForgeEquivalentComparisons
+        COMMAND ${CMAKE_COMMAND}
+            -DCOMPARISONS_EXE=$<TARGET_FILE:benchforge_comparisons>
+            -DRUNTIME_DIR=${BENCHFORGE_COMPILER_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_comparisons.cmake
     )
 endif()

@@ -7,6 +7,8 @@ import math
 import numpy as np
 from scipy.stats import mannwhitneyu
 
+MINIMUM_PAIRED_OBSERVATIONS = 5
+
 
 def median_ratio(baseline, candidate) -> float:
     """Return candidate median divided by baseline median."""
@@ -175,7 +177,6 @@ def bootstrap_paired_median_ratio_ci(
     import numpy as np
 
     baseline, candidate = _validate_paired_samples(baseline, candidate)
-
     if not 0 < confidence < 1:
         raise ValueError("confidence must be between 0 and 1.")
     if isinstance(n_resamples, bool) or not isinstance(n_resamples, int):
@@ -184,6 +185,12 @@ def bootstrap_paired_median_ratio_ci(
         raise ValueError("n_resamples must be at least 100.")
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise TypeError("seed must be an integer.")
+    if len(baseline) < MINIMUM_PAIRED_OBSERVATIONS:
+        raise ValueError(
+            "At least "
+            f"{MINIMUM_PAIRED_OBSERVATIONS} paired observations are required "
+            "for bootstrap inference."
+        )
 
     log_ratios = (
         np.log(np.asarray(candidate, dtype=float))

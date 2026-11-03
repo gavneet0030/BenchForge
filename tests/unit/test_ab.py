@@ -29,6 +29,7 @@ def test_ab_produces_paired_records_in_execution_order(
     baseline = make_executable(tmp_path / "baseline.exe")
     candidate = make_executable(tmp_path / "candidate.exe")
     calls = []
+    timeouts = []
 
     real_run = subprocess.run
 
@@ -36,6 +37,7 @@ def test_ab_produces_paired_records_in_execution_order(
         if "--iterations" not in command:
             return real_run(command, **kwargs)
         calls.append(command)
+        timeouts.append(kwargs["timeout"])
         iterations = int(command[command.index("--iterations") + 1])
         extra_work = int(command[command.index("--extra-work") + 1])
         return subprocess.CompletedProcess(
@@ -62,6 +64,7 @@ def test_ab_produces_paired_records_in_execution_order(
 
     assert len(records) == 8
     assert len(calls) == 10  # 2 warm-ups plus 8 measured invocations
+    assert set(timeouts) == {30}
     assert {r["variant"] for r in records} == {"baseline", "candidate"}
     assert {r["run_id"] for r in records}.__len__() == 1
     assert [r["execution_order"] for r in records] == list(range(8))
@@ -119,6 +122,14 @@ def test_seed_reproduces_variant_order(tmp_path, monkeypatch):
         {"runs": 2, "iterations": 0},
         {"runs": 2, "baseline_extra_work": -1},
         {"runs": 2, "candidate_extra_work": -1},
+        {"runs": 1001},
+        {"runs": 2, "iterations": 100_000_001},
+        {"runs": 2, "candidate_delay_ns": 5_000_000_001},
+        {
+            "runs": 1000,
+            "warmup": 100,
+            "iterations": 1_000_000,
+        },
     ],
 )
 def test_invalid_settings_are_rejected(tmp_path, kwargs):
@@ -141,6 +152,40 @@ def test_missing_binary_is_rejected(tmp_path):
         )
 
 
+@pytest.mark.parametrize(
+    ("failure", "expected_type", "message"),
+    [
+        (
+            subprocess.TimeoutExpired(["benchmark"], 30),
+            TimeoutError,
+            "Native .* exceeded 30 seconds",
+        ),
+        (
+            subprocess.CalledProcessError(
+                9, ["benchmark"], output="", stderr="native diagnostic"
+            ),
+            RuntimeError,
+            "exit code 9: native diagnostic",
+        ),
+    ],
+)
+def test_ab_reports_native_process_failures_with_context(
+    tmp_path, monkeypatch, failure, expected_type, message
+):
+    baseline = make_executable(tmp_path / "base.exe")
+    candidate = make_executable(tmp_path / "cand.exe")
+
+    def fail(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(subprocess, "run", fail)
+
+    with pytest.raises(expected_type, match=message) as caught:
+        run_ab_benchmark(baseline, candidate, runs=2, warmup=0)
+
+    assert caught.value.__cause__ is failure
+
+
 def test_invalid_native_json_is_rejected(tmp_path, monkeypatch):
     baseline = make_executable(tmp_path / "base.exe")
     candidate = make_executable(tmp_path / "cand.exe")
@@ -154,3 +199,61 @@ def test_invalid_native_json_is_rejected(tmp_path, monkeypatch):
         run_ab_benchmark(
             baseline, candidate, runs=2, warmup=0
         )
+
+
+def test_ab_rejects_mismatched_checksums_for_equivalent_workloads(
+    tmp_path, monkeypatch
+):
+    baseline = make_executable(tmp_path / "base.exe")
+    candidate = make_executable(tmp_path / "cand.exe")
+
+    def fake_run(command, **kwargs):
+        iterations = int(command[command.index("--iterations") + 1])
+        extra_work = int(command[command.index("--extra-work") + 1])
+        checksum = 10 if command[0] == str(baseline) else 11
+        measurement = json.loads(
+            fake_measurement(iterations=iterations, extra_work=extra_work)
+        )
+        measurement["checksum"] = checksum
+        return subprocess.CompletedProcess(command, 0, json.dumps(measurement), "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(ValueError, match="Correctness mismatch"):
+        run_ab_benchmark(
+            baseline,
+            candidate,
+            runs=2,
+            warmup=0,
+            baseline_extra_work=0,
+            candidate_extra_work=0,
+        )
+
+
+def test_ab_allows_different_checksums_for_different_workloads(
+    tmp_path, monkeypatch
+):
+    baseline = make_executable(tmp_path / "base.exe")
+    candidate = make_executable(tmp_path / "cand.exe")
+
+    def fake_run(command, **kwargs):
+        iterations = int(command[command.index("--iterations") + 1])
+        extra_work = int(command[command.index("--extra-work") + 1])
+        measurement = json.loads(
+            fake_measurement(iterations=iterations, extra_work=extra_work)
+        )
+        measurement["checksum"] = extra_work
+        return subprocess.CompletedProcess(command, 0, json.dumps(measurement), "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    records = run_ab_benchmark(
+        baseline,
+        candidate,
+        runs=2,
+        warmup=0,
+        baseline_extra_work=0,
+        candidate_extra_work=1,
+    )
+
+    assert len(records) == 4

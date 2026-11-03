@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: stg_benchmark_samples
+    description: Typed staging view over BenchForge's benchmark sample fields.
+    columns:
+      - name: record_key
+        data_tests:
+          - not_null
+          - unique
+      - name: run_id
+        data_tests:
+          - not_null
+      - name: workload
+        data_tests:
+          - not_null
+      - name: variant
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["single", "baseline", "candidate"]
+      - name: elapsed_ns
+        data_tests:
+          - not_null
+
+  - name: stg_benchmark_runs
+    columns:
+      - name: run_id
+        data_tests:
+          - not_null
+          - unique
+
+  - name: fct_benchmark_summary
+    description: Per-run workload and variant sample counts and latency quantiles.
+    columns:
+      - name: run_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_benchmark_runs')
+                field: run_id
+      - name: workload
+        data_tests:
+          - not_null
+      - name: variant
+        data_tests:
+          - not_null
+      - name: sample_count
+        data_tests:
+          - not_null

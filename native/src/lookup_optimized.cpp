@@ -1,10 +1,35 @@
 #include <chrono>
+#include <charconv>
 #include <cstdint>
-#include <cstdlib>
 #include <iostream>
+#include <string_view>
 #include <string>
 #include <thread>
 #include <unordered_map>
+
+namespace {
+
+constexpr std::uint64_t max_iterations = 100'000'000;
+constexpr std::uint64_t max_extra_work = 100'000;
+constexpr std::uint64_t max_delay_ns = 5'000'000'000;
+constexpr std::uint64_t max_operation_volume = 1'000'000'000;
+
+bool parse_bounded_uint64(
+    std::string_view text,
+    std::uint64_t maximum,
+    std::uint64_t& value
+) {
+    if (text.empty()) {
+        return false;
+    }
+
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+    return result.ec == std::errc{}
+        && result.ptr == text.data() + text.size()
+        && value <= maximum;
+}
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
     std::uint64_t iterations = 100000;
@@ -15,11 +40,23 @@ int main(int argc, char* argv[]) {
         const std::string arg = argv[i];
 
         if (arg == "--iterations" && i + 1 < argc) {
-            iterations = std::strtoull(argv[++i], nullptr, 10);
+            if (!parse_bounded_uint64(argv[++i], max_iterations, iterations)) {
+                std::cerr << "iterations must be an integer from 1 to "
+                          << max_iterations << '\n';
+                return 2;
+            }
         } else if (arg == "--extra-work" && i + 1 < argc) {
-            extra_work = std::strtoull(argv[++i], nullptr, 10);
+            if (!parse_bounded_uint64(argv[++i], max_extra_work, extra_work)) {
+                std::cerr << "extra-work must be an integer from 0 to "
+                          << max_extra_work << '\n';
+                return 2;
+            }
         } else if (arg == "--delay-ns" && i + 1 < argc) {
-            delay_ns = std::strtoull(argv[++i], nullptr, 10);
+            if (!parse_bounded_uint64(argv[++i], max_delay_ns, delay_ns)) {
+                std::cerr << "delay-ns must be an integer from 0 to "
+                          << max_delay_ns << '\n';
+                return 2;
+            }
         } else {
             std::cerr << "Unknown or incomplete argument: " << arg << '\n';
             return 2;
@@ -28,6 +65,12 @@ int main(int argc, char* argv[]) {
 
     if (iterations == 0) {
         std::cerr << "iterations must be greater than zero\n";
+        return 2;
+    }
+
+    if (iterations > max_operation_volume / (extra_work + 1)) {
+        std::cerr << "iterations times (extra-work + 1) must not exceed "
+                  << max_operation_volume << '\n';
         return 2;
     }
 

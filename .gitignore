@@ -26,6 +26,12 @@ data/raw/*
 data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+data/documents/*
+!data/documents/.gitkeep
+data/public_datasets/raw/*
+!data/public_datasets/raw/.gitkeep
+data/public_datasets/processed/*
+!data/public_datasets/processed/.gitkeep
 reports/generated/*
 !reports/generated/.gitkeep
 *.sqlite
@@ -38,3 +44,10 @@ reports/generated/*
 .DS_Store
 Thumbs.db
 .env
+
+# Local backups retained outside publication
+README.backup-*.md
+native/CMakeLists.txt.bak
+
+# Generated dataset verification outputs
+data/public_datasets/verification_run/

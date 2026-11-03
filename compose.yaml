@@ -1,0 +1,19 @@
+services:
+  dashboard:
+    build:
+      context: .
+    image: benchforge:local
+    ports:
+      - "${BENCHFORGE_BIND:-127.0.0.1}:${BENCHFORGE_PORT:-8765}:8765"
+    environment:
+      BENCHFORGE_DATABASE: /data/benchforge.sqlite
+      BENCHFORGE_DATA_DIR: /data/public_datasets/processed
+      BENCHFORGE_HOST: 0.0.0.0
+      BENCHFORGE_PORT: 8765
+    volumes:
+      - benchforge-data:/data
+    stop_signal: SIGINT
+    init: true
+
+volumes:
+  benchforge-data:

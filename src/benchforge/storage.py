@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from pathlib import Path
 from typing import Any
@@ -32,7 +33,20 @@ def initialize_database(database: Path) -> None:
                 config_json TEXT NOT NULL DEFAULT '{}',
                 pair_index INTEGER,
                 execution_order INTEGER,
-                seed INTEGER
+                seed INTEGER,
+                bytes_processed INTEGER,
+                peak_process_memory_bytes INTEGER,
+                peak_process_memory_source TEXT,
+                current_working_set_bytes INTEGER,
+                private_process_bytes INTEGER,
+                thread_count INTEGER,
+                process_cpu_time_ns INTEGER,
+                cpu_utilization_percent REAL,
+                compiler TEXT,
+                compiler_version TEXT,
+                build_type TEXT,
+                build_generator TEXT,
+                build_toolset TEXT
             )
         """)
 
@@ -46,6 +60,19 @@ def initialize_database(database: Path) -> None:
             "pair_index": "INTEGER",
             "execution_order": "INTEGER",
             "seed": "INTEGER",
+            "bytes_processed": "INTEGER",
+            "peak_process_memory_bytes": "INTEGER",
+            "peak_process_memory_source": "TEXT",
+            "current_working_set_bytes": "INTEGER",
+            "private_process_bytes": "INTEGER",
+            "thread_count": "INTEGER",
+            "process_cpu_time_ns": "INTEGER",
+            "cpu_utilization_percent": "REAL",
+            "compiler": "TEXT",
+            "compiler_version": "TEXT",
+            "build_type": "TEXT",
+            "build_generator": "TEXT",
+            "build_toolset": "TEXT",
         }
 
         for column, declaration in migrations.items():
@@ -121,6 +148,67 @@ def _prepare_sample_rows(
         if seed is not None and (isinstance(seed, bool) or not isinstance(seed, int)):
             raise ValueError("seed must be an integer.")
 
+        bytes_processed = record.get("bytes_processed")
+        if bytes_processed is not None and (
+            isinstance(bytes_processed, bool)
+            or not isinstance(bytes_processed, int)
+            or bytes_processed < 0
+        ):
+            raise ValueError("bytes_processed must be a non-negative integer.")
+
+        peak_memory = record.get("peak_process_memory_bytes")
+        if peak_memory is not None and (
+            isinstance(peak_memory, bool)
+            or not isinstance(peak_memory, int)
+            or peak_memory <= 0
+        ):
+            raise ValueError("peak_process_memory_bytes must be a positive integer.")
+
+        for field in ("current_working_set_bytes", "private_process_bytes"):
+            value = record.get(field)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            ):
+                raise ValueError(f"{field} must be a positive integer or None.")
+
+        thread_count = record.get("thread_count")
+        if thread_count is not None and (
+            isinstance(thread_count, bool)
+            or not isinstance(thread_count, int)
+            or thread_count < 1
+        ):
+            raise ValueError("thread_count must be a positive integer or None.")
+
+        process_cpu_time = record.get("process_cpu_time_ns")
+        if process_cpu_time is not None and (
+            isinstance(process_cpu_time, bool)
+            or not isinstance(process_cpu_time, int)
+            or process_cpu_time < 0
+        ):
+            raise ValueError("process_cpu_time_ns must be a non-negative integer.")
+
+        cpu_utilization = record.get("cpu_utilization_percent")
+        if cpu_utilization is not None and (
+            isinstance(cpu_utilization, bool)
+            or not isinstance(cpu_utilization, (int, float))
+            or not math.isfinite(cpu_utilization)
+            or cpu_utilization < 0
+        ):
+            raise ValueError("cpu_utilization_percent must be finite and non-negative.")
+
+        text_fields = (
+            "peak_process_memory_source",
+            "compiler",
+            "compiler_version",
+            "build_type",
+            "build_generator",
+            "build_toolset",
+        )
+        for field in text_fields:
+            value = record.get(field)
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ValueError(f"{field} must be a non-empty string or None.")
+
         rows.append(
             (
                 record["timestamp_utc"],
@@ -138,6 +226,19 @@ def _prepare_sample_rows(
                 record.get("pair_index"),
                 record.get("execution_order"),
                 seed,
+                bytes_processed,
+                peak_memory,
+                record.get("peak_process_memory_source"),
+                record.get("current_working_set_bytes"),
+                record.get("private_process_bytes"),
+                thread_count,
+                process_cpu_time,
+                cpu_utilization,
+                record.get("compiler"),
+                record.get("compiler_version"),
+                record.get("build_type"),
+                record.get("build_generator"),
+                record.get("build_toolset"),
             )
         )
 
@@ -173,8 +274,12 @@ def save_samples(
                 timestamp_utc, workload, sample_index, elapsed_ns,
                 extra_work, os, python_version, schema_version,
                 run_id, variant, binary, config_json,
-                pair_index, execution_order, seed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pair_index, execution_order, seed, bytes_processed,
+                peak_process_memory_bytes, peak_process_memory_source,
+                current_working_set_bytes, private_process_bytes, thread_count,
+                process_cpu_time_ns, cpu_utilization_percent,
+                compiler, compiler_version, build_type, build_generator, build_toolset
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             rows,
         )
@@ -214,8 +319,12 @@ def save_experiment_samples(
             timestamp_utc, workload, sample_index, elapsed_ns,
             extra_work, os, python_version, schema_version,
             run_id, variant, binary, config_json,
-            pair_index, execution_order, seed
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            pair_index, execution_order, seed, bytes_processed,
+            peak_process_memory_bytes, peak_process_memory_source,
+            current_working_set_bytes, private_process_bytes, thread_count,
+            process_cpu_time_ns, cpu_utilization_percent,
+            compiler, compiler_version, build_type, build_generator, build_toolset
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
     with sqlite3.connect(database) as connection:

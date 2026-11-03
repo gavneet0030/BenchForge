@@ -1,0 +1,7 @@
+benchforge_analytics:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('BENCHFORGE_DUCKDB_PATH', 'target/benchforge_analytics.duckdb') }}"
+      threads: 2

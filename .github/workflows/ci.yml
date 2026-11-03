@@ -5,15 +5,76 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  python-tests:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
+          cache: pip
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e ".[dev]"
-      - run: pytest
-      - run: ruff check src tests
+      - run: python -m pip install -e ".[dev,datasets,web]"
+      - run: cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/native --config Release --parallel 2
+      - run: ctest --test-dir build/native -C Release --output-on-failure
+      - run: python -m pytest -q
+      - run: python -m ruff check src tests
+      - run: python -m benchforge.cli --help
+      - run: python -m pip check
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build container
+        run: docker build --tag benchforge:ci .
+      - name: Verify dashboard, benchmark execution, and persistent history
+        shell: bash
+        run: |
+          docker volume create benchforge-ci-data
+          docker run --detach --name benchforge-ci \
+            --publish 127.0.0.1:8765:8765 \
+            --volume benchforge-ci-data:/data \
+            benchforge:ci
+          cleanup() {
+            docker rm --force benchforge-ci >/dev/null 2>&1 || true
+            docker volume rm benchforge-ci-data >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8765/healthz; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8765/api/benchmarks \
+            | python -c "import json,sys; assert json.load(sys.stdin)['runs'] == []"
+          docker exec benchforge-ci benchforge workload \
+            --workload cpu \
+            --binary /opt/benchforge/bin/benchforge_workloads \
+            --runs 2 --warmup 0 --iterations 1000 \
+            --database /data/benchforge.sqlite \
+            --output /data/ci-smoke.jsonl
+          docker exec benchforge-ci test -s /data/ci-smoke.jsonl
+          docker restart benchforge-ci >/dev/null
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8765/healthz >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8765/api/benchmarks \
+            | python -c "import json,sys; assert len(json.load(sys.stdin)['runs']) == 1"
+          docker stop --time 10 benchforge-ci
