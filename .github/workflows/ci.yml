@@ -24,7 +24,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e ".[dev,datasets]"
+      - run: python -m pip install -e ".[dev,datasets,web]"
       - run: cmake -S native -B build/native -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build/native --config Release --parallel 2
       - run: ctest --test-dir build/native -C Release --output-on-failure
