@@ -1,0 +1,28 @@
+name: benchforge_analytics
+version: "1.0.0"
+config-version: 2
+profile: benchforge_analytics
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  benchforge_analytics:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  benchforge_analytics:
+    benchmark_samples:
+      +column_types:
+        sample_index: integer
+        elapsed_ns: bigint
+        extra_work: bigint
+        schema_version: integer
+        pair_index: integer
+        execution_order: integer
+        seed: bigint

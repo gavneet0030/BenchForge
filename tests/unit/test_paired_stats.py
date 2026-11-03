@@ -55,6 +55,14 @@ def test_bootstrap_rejects_too_few_resamples():
             [1, 2], [1, 2], n_resamples=10
         )
 
+
+def test_paired_bootstrap_rejects_fewer_than_five_pairs():
+    with pytest.raises(ValueError, match="At least 5 paired observations"):
+        bootstrap_paired_median_ratio_ci(
+            [100, 200, 300, 400],
+            [110, 220, 330, 440],
+        )
+
 @pytest.mark.parametrize(
     "baseline,candidate",
     [

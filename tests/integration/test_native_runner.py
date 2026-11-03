@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 BINARY_CANDIDATES = [
     ROOT / "build" / "native-ucrt64" / "benchforge_lookup.exe",
+    ROOT / "build" / "native" / "Release" / "benchforge_lookup.exe",
+    ROOT / "build" / "native" / "Debug" / "benchforge_lookup.exe",
     ROOT / "build" / "native" / "benchforge_lookup.exe",
     ROOT / "build" / "native-ucrt64" / "benchforge_lookup",
     ROOT / "build" / "native" / "benchforge_lookup",
@@ -58,7 +60,7 @@ def test_native_runner_saves_valid_measurements(tmp_path):
 
 
 def test_runner_rejects_fewer_than_two_runs(tmp_path):
-    with pytest.raises(ValueError, match="Invalid run"):
+    with pytest.raises(ValueError, match="runs must be"):
         run_benchmark(
             binary=ROOT / "missing-binary.exe",
             runs=1,
@@ -67,7 +69,7 @@ def test_runner_rejects_fewer_than_two_runs(tmp_path):
 
 
 def test_runner_rejects_zero_iterations(tmp_path):
-    with pytest.raises(ValueError, match="Invalid run"):
+    with pytest.raises(ValueError, match="iterations must be"):
         run_benchmark(
             binary=ROOT / "missing-binary.exe",
             runs=2,

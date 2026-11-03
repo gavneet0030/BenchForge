@@ -54,5 +54,26 @@ if(NOT checksum EQUAL 8494500)
     message(FATAL_ERROR "Unexpected checksum for 1000 iterations: ${checksum}")
 endif()
 
+function(expect_rejected label)
+    execute_process(
+        COMMAND "${LOOKUP_EXE}" ${ARGN}
+        RESULT_VARIABLE invalid_result
+        OUTPUT_QUIET
+        ERROR_QUIET
+        TIMEOUT 5
+    )
+    if(invalid_result EQUAL 0)
+        message(FATAL_ERROR "Native lookup accepted invalid ${label} arguments")
+    endif()
+endfunction()
+
+expect_rejected("negative integer" --iterations -1)
+expect_rejected("malformed integer" --iterations 10junk)
+expect_rejected("iteration limit" --iterations 100000001)
+expect_rejected("extra-work limit" --extra-work 100001)
+expect_rejected("delay limit" --delay-ns 5000000001)
+expect_rejected("operation-volume limit"
+    --iterations 100000000 --extra-work 10)
+
 message(STATUS
     "Native correctness test passed; checksum=${checksum}; elapsed_ns=${elapsed_ns}")

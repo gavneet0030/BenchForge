@@ -13,17 +13,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-os.environ["PATH"] = r"C:\msys64\ucrt64\bin" + os.pathsep + os.environ.get("PATH", "")
-
-from benchforge.ab import run_ab_benchmark
-from benchforge.stats import (
-    bootstrap_paired_median_ratio_ci,
-    classify_regression,
-    wilcoxon_paired_pvalue,
-)
-
 
 def main():
+    os.environ.setdefault("BENCHFORGE_NATIVE_RUNTIME_DIR", r"C:\msys64\ucrt64\bin")
+    from benchforge.ab import run_ab_benchmark
+    from benchforge.stats import (
+        bootstrap_paired_median_ratio_ci,
+        classify_regression,
+        wilcoxon_paired_pvalue,
+    )
+
     parser = argparse.ArgumentParser(
         description="Evaluate BenchForge's paired A/B regression classifier."
     )
